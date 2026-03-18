@@ -20,7 +20,7 @@ export interface MorphResult {
 
 /**
  * Generate N intermediate SVG path strings between two shapes.
- * Uses GSAP MorphSVGPlugin for high-quality path interpolation.
+ * Uses GSAP MorphSVGPlugin's raw path utilities for interpolation.
  * Steps clamped to 5-15 per brand rules.
  */
 export function generateMorphSteps(
@@ -45,7 +45,9 @@ export function generateMorphSteps(
     } else if (t === 1) {
       steps.push(MorphSVGPlugin.rawPathToString(toRaw))
     } else {
-      // Interpolate each segment's values
+      // Linear interpolation of all path values (anchors + control points).
+      // This preserves cubic bezier smoothness because both paths have been
+      // equalized to the same structure by equalizeSegmentQuantity.
       const interpolated = fromRaw.map((segment: number[], segIdx: number) => {
         const toSegment = toRaw[segIdx] || segment
         return segment.map((val: number, valIdx: number) => {
@@ -53,10 +55,6 @@ export function generateMorphSteps(
           return val + (toVal - val) * t
         })
       })
-      // Smooth the interpolated path to restore bezier curve quality.
-      // Without this, linear interpolation of control points produces
-      // harsh corners in intermediate morph steps.
-      MorphSVGPlugin.smoothRawPath(interpolated, 1)
       steps.push(MorphSVGPlugin.rawPathToString(interpolated))
     }
   }

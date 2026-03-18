@@ -114,8 +114,6 @@ export function render(canvas: HTMLCanvasElement, config: RenderConfig): void {
   const colours = resolveScheme(config.scheme)
   const gradientColours = resolveGradientColours(config.scheme)
 
-  // Blur is applied per-step inside each renderer (inside save/restore)
-
   // Parse viewBox for coordinate mapping (use from shape's viewBox)
   const vb = fromShape.viewBox.split(' ').map(Number)
   const scaleX = width / vb[2]
@@ -124,40 +122,50 @@ export function render(canvas: HTMLCanvasElement, config: RenderConfig): void {
   const translateX = (width - vb[2] * scaleFactor) / 2
   const translateY = (height - vb[3] * scaleFactor) / 2
 
+  // Render shapes to an offscreen canvas so blur can be applied
+  // to the ENTIRE result including edges (not clipped inside shapes)
+  const offscreen = new OffscreenCanvas(width * dpr, height * dpr)
+  const offCtx = offscreen.getContext('2d')!
+  offCtx.scale(dpr, dpr)
+
   switch (config.variant) {
     case 'wireframe':
-      renderWireframe(ctx, steps, colours, scaleFactor, translateX, translateY, width, height)
+      renderWireframe(offCtx, steps, colours, scaleFactor, translateX, translateY, width, height)
       break
     case 'filled':
-      renderFilled(ctx, steps, gradientColours, config, scaleFactor, translateX, translateY, width, height, vb)
+      renderFilled(offCtx, steps, gradientColours, config, scaleFactor, translateX, translateY, width, height, vb)
       break
     case 'gradient':
-      renderGradient(ctx, steps, gradientColours, config, scaleFactor, translateX, translateY, width, height, vb)
+      renderGradient(offCtx, steps, gradientColours, config, scaleFactor, translateX, translateY, width, height, vb)
       break
   }
 
-  // Reset filter before noise overlay
-  ctx.filter = 'none'
-
-  // Noise overlay — clipped to shape area only
+  // Noise overlay — clipped to shape area (on offscreen canvas)
   if (config.noise.enabled) {
     const noiseTexture = generateNoiseTexture(config.noise.size, config.noise.opacity)
     const noiseCanvas = new OffscreenCanvas(config.noise.size, config.noise.size)
     const noiseCtx = noiseCanvas.getContext('2d')!
     noiseCtx.putImageData(noiseTexture, 0, 0)
-    const pattern = ctx.createPattern(noiseCanvas, 'repeat')
+    const pattern = offCtx.createPattern(noiseCanvas, 'repeat')
     if (pattern) {
-      // source-atop: draws noise ONLY where shape pixels already exist
-      ctx.globalCompositeOperation = 'source-atop'
-      ctx.fillStyle = pattern
-      ctx.fillRect(0, 0, width, height)
-      ctx.globalCompositeOperation = 'source-over'
+      offCtx.globalCompositeOperation = 'source-atop'
+      offCtx.fillStyle = pattern
+      offCtx.fillRect(0, 0, width, height)
+      offCtx.globalCompositeOperation = 'source-over'
     }
   }
+
+  // Draw offscreen canvas to main canvas, applying blur to the WHOLE image
+  // This blurs shape edges (not just fill inside the clip path)
+  if (config.blur.enabled) {
+    ctx.filter = `blur(${config.blur.radius}px)`
+  }
+  ctx.drawImage(offscreen, 0, 0, width, height)
+  ctx.filter = 'none'
 }
 
 function renderWireframe(
-  ctx: CanvasRenderingContext2D,
+  ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
   steps: string[],
   colours: { current: string; catalyst: string; future: string },
   scale: number,
@@ -188,7 +196,7 @@ function renderWireframe(
 }
 
 function renderFilled(
-  ctx: CanvasRenderingContext2D,
+  ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
   steps: string[],
   colours: { current: string; catalyst: string; future: string },
   config: RenderConfig,
@@ -217,11 +225,6 @@ function renderFilled(
 
     ctx.save()
 
-    // Apply blur per-step (inside save/restore so it doesn't leak)
-    if (config.blur.enabled) {
-      ctx.filter = `blur(${config.blur.radius}px)`
-    }
-
     // Transform into shape-local coordinate space
     ctx.translate(tx + offsetX, ty + offsetY)
     ctx.scale(totalScale, totalScale)
@@ -245,7 +248,7 @@ function renderFilled(
 }
 
 function renderGradient(
-  ctx: CanvasRenderingContext2D,
+  ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
   steps: string[],
   colours: { current: string; catalyst: string; future: string },
   config: RenderConfig,
