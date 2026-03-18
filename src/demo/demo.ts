@@ -24,9 +24,9 @@ const config = {
   animMode: 'none' as 'none' | 'trail' | 'breathe',
   duration: 2000,
   // Vertex animation
-  basalAmplitude: DEFAULT_VERTEX_ANIM.basalAmplitude,
-  basalSpeed: DEFAULT_VERTEX_ANIM.basalSpeed,
-  basalFrequency: DEFAULT_VERTEX_ANIM.basalFrequency,
+  breathingAmplitude: DEFAULT_VERTEX_ANIM.breathingAmplitude,
+  breathingSpeed: DEFAULT_VERTEX_ANIM.breathingSpeed,
+  breathingFrequency: DEFAULT_VERTEX_ANIM.breathingFrequency,
   bolusAmplitude: DEFAULT_VERTEX_ANIM.bolusAmplitude,
   bolusSpeed: DEFAULT_VERTEX_ANIM.bolusSpeed,
   bolusWidth: DEFAULT_VERTEX_ANIM.bolusWidth,
@@ -172,9 +172,9 @@ function startBreatheAnimation() {
     const time = (now - startTime) / 1000 // seconds
 
     const vertexConfig: VertexAnimConfig = {
-      basalAmplitude: config.basalAmplitude,
-      basalSpeed: config.basalSpeed,
-      basalFrequency: config.basalFrequency,
+      breathingAmplitude: config.breathingAmplitude,
+      breathingSpeed: config.breathingSpeed,
+      breathingFrequency: config.breathingFrequency,
       bolusAmplitude: config.bolusAmplitude,
       bolusSpeed: config.bolusSpeed,
       bolusWidth: config.bolusWidth,
@@ -269,9 +269,9 @@ animFolder.add(config, 'duration', 500, 5000, 100).name('Trail Duration')
 animFolder.add({ replay: () => { if (config.animMode === 'trail') startTrailAnimation() } }, 'replay').name('Replay Trail')
 
 const breatheFolder = gui.addFolder('Breathe')
-breatheFolder.add(config, 'basalAmplitude', 0, 5, 0.1).name('Wobble Amp')
-breatheFolder.add(config, 'basalSpeed', 0.1, 2, 0.05).name('Wobble Speed')
-breatheFolder.add(config, 'basalFrequency', 0.01, 0.3, 0.01).name('Wobble Freq')
+breatheFolder.add(config, 'breathingAmplitude', 0, 5, 0.1).name('Breathing Amp')
+breatheFolder.add(config, 'breathingSpeed', 0.1, 2, 0.05).name('Breathing Speed')
+breatheFolder.add(config, 'breathingFrequency', 0.01, 0.3, 0.01).name('Breathing Freq')
 breatheFolder.add(config, 'bolusAmplitude', 0, 10, 0.5).name('Pulse Amp')
 breatheFolder.add(config, 'bolusSpeed', 0.1, 3, 0.1).name('Pulse Speed')
 breatheFolder.add(config, 'bolusWidth', 0.05, 0.5, 0.01).name('Pulse Width')
