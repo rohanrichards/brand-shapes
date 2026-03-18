@@ -8,6 +8,19 @@
  * - ImageData for noise texture overlay
  */
 import { type ShapeName, getShape } from '../core/shapes'
+
+/** Fast centroid from SVG path string — averages all coordinate pairs. */
+function pathCentroid(pathStr: string): [number, number] {
+  const nums = pathStr.match(/-?[\d.]+(?:e[+-]?\d+)?/gi)
+  if (!nums || nums.length < 2) return [0, 0]
+  let sx = 0, sy = 0, count = 0
+  for (let i = 0; i < nums.length - 1; i += 2) {
+    sx += parseFloat(nums[i])
+    sy += parseFloat(nums[i + 1])
+    count++
+  }
+  return [sx / count, sy / count]
+}
 import { type ColourFamily, resolveScheme, resolveGradientColours } from '../core/colours'
 import { generateMorphSteps } from '../core/morph'
 import {
@@ -229,10 +242,10 @@ function renderFilled(
 ): void {
   // Figma pattern: each step gets its OWN conic gradient, clipped to its shape.
   // The gradient fills the entire shape independently per step.
-  const shapeCenterX = vb[2] / 2
-  const shapeCenterY = vb[3] / 2
-
   for (let i = 0; i < steps.length; i++) {
+    // Compute gradient center from actual path coordinates (tracks cursor parallax etc.)
+    const [shapeCenterX, shapeCenterY] = pathCentroid(steps[i])
+
     const stepIdx = config.stepIndices ? config.stepIndices[i] : i
     const stepTotal = config.totalStepCount || steps.length
     const { scale: stepScale, offsetX, offsetY } = computeStepTransform(
@@ -240,17 +253,11 @@ function renderFilled(
     )
     const totalScale = scale * stepScale
 
-    // Per-step angle rotation (Figma uses a full 2D transform matrix per step;
-    // we approximate with angle rotation)
     const angleDeg = 90 + (stepIdx / stepTotal) * 120
     const angleRad = (angleDeg * Math.PI) / 180
 
     ctx.save()
 
-    // Scale from shape center, not top-left:
-    // 1. Translate so shape center is at canvas-space origin
-    // 2. Apply per-step scale
-    // 3. Translate back, plus alignment offset
     const shapeCenterCanvasX = tx + shapeCenterX * scale
     const shapeCenterCanvasY = ty + shapeCenterY * scale
     ctx.translate(shapeCenterCanvasX + offsetX, shapeCenterCanvasY + offsetY)
