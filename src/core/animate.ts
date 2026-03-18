@@ -13,10 +13,6 @@ export interface VertexAnimConfig {
   breathingAmplitude: number
   breathingSpeed: number
   breathingFrequency: number
-  /** Cursor repulsion strength */
-  cursorRepulsion: number
-  /** Cursor repulsion radius (in shape units) */
-  cursorRadius: number
   /** Pulse radial amplitude */
   pulseAmplitude: number
   /** Natural pulse interval in seconds (automatic heartbeat) */
@@ -31,8 +27,6 @@ export const DEFAULT_VERTEX_ANIM: VertexAnimConfig = {
   breathingAmplitude: 1.5,
   breathingSpeed: 0.4,
   breathingFrequency: 0.08,
-  cursorRepulsion: 3.0,
-  cursorRadius: 200,
   pulseAmplitude: 4.0,
   pulseInterval: 3.0,
   pulseSharpness: 12,
@@ -77,7 +71,6 @@ export function displacePoints(
   time: number,
   config: VertexAnimConfig,
   layerIndex: number = 0,
-  cursor: CursorState | null = null,
   pulse: PulseState | null = null,
 ): Point[] {
   const n = points.length
@@ -112,22 +105,6 @@ export function displacePoints(
     )
     let dx = noiseX * config.breathingAmplitude
     let dy = noiseY * config.breathingAmplitude
-
-    // --- Cursor repulsion ---
-    if (cursor && config.cursorRepulsion > 0) {
-      const toCursorX = p[0] - cursor.x
-      const toCursorY = p[1] - cursor.y
-      const distToCursor = Math.sqrt(toCursorX * toCursorX + toCursorY * toCursorY)
-
-      if (distToCursor < config.cursorRadius && distToCursor > 0.001) {
-        // Smooth falloff: strongest at cursor, zero at radius edge
-        const falloff = 1 - (distToCursor / config.cursorRadius)
-        // Cubic falloff for smooth feel
-        const strength = falloff * falloff * falloff * config.cursorRepulsion
-        dx += (toCursorX / distToCursor) * strength
-        dy += (toCursorY / distToCursor) * strength
-      }
-    }
 
     // --- Pulse: radial outward from centroid ---
     if (pulseStrength > 0.01) {

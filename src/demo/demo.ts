@@ -3,7 +3,7 @@ import { render, type RenderConfig } from '../renderer/canvas-renderer'
 import { shapeNames, getShape } from '../core/shapes'
 import { DEFAULT_NOISE_CONFIG } from '../core/effects'
 import { createMorphInterpolator, getMorphPoints, smoothPath, type Point } from '../core/morph'
-import { displacePoints, DEFAULT_VERTEX_ANIM, type VertexAnimConfig, type CursorState, type PulseState } from '../core/animate'
+import { displacePoints, DEFAULT_VERTEX_ANIM, type VertexAnimConfig, type PulseState } from '../core/animate'
 import { presets, presetNames } from './presets'
 
 const config = {
@@ -27,8 +27,7 @@ const config = {
   breathingAmplitude: DEFAULT_VERTEX_ANIM.breathingAmplitude,
   breathingSpeed: DEFAULT_VERTEX_ANIM.breathingSpeed,
   breathingFrequency: DEFAULT_VERTEX_ANIM.breathingFrequency,
-  cursorRepulsion: DEFAULT_VERTEX_ANIM.cursorRepulsion,
-  cursorRadius: DEFAULT_VERTEX_ANIM.cursorRadius,
+  cursorParallax: 0.03,
   pulseAmplitude: DEFAULT_VERTEX_ANIM.pulseAmplitude,
   pulseInterval: DEFAULT_VERTEX_ANIM.pulseInterval,
   pulseSharpness: DEFAULT_VERTEX_ANIM.pulseSharpness,
@@ -153,7 +152,7 @@ function startTrailAnimation() {
 
 // --- Cursor & pulse state ---
 
-let cursorState: CursorState | null = null
+let cursorState: { x: number; y: number } | null = null
 let pulseState: PulseState | null = null
 let breatheStartTime = 0
 
@@ -161,7 +160,7 @@ let breatheStartTime = 0
 // The renderer transforms: translate(tx, ty) then scale(scaleFactor)
 // So shape-local = (canvasPos - translate) / scaleFactor
 // We compute these from the same viewBox logic as the renderer
-function canvasToShapeCoords(canvasX: number, canvasY: number): CursorState {
+function canvasToShapeCoords(canvasX: number, canvasY: number): { x: number; y: number } {
   const fromShape = getShape(config.from as any)
   const vb = fromShape.viewBox.split(' ').map(Number)
   const width = canvas.clientWidth
@@ -215,27 +214,58 @@ function startBreatheAnimation() {
       breathingAmplitude: config.breathingAmplitude,
       breathingSpeed: config.breathingSpeed,
       breathingFrequency: config.breathingFrequency,
-      cursorRepulsion: config.cursorRepulsion,
-      cursorRadius: config.cursorRadius,
       pulseAmplitude: config.pulseAmplitude,
       pulseInterval: config.pulseInterval,
       pulseSharpness: config.pulseSharpness,
       pulseCascadeDelay: config.pulseCascadeDelay,
     }
 
+    // Cursor parallax: each layer shifts away from cursor.
+    // Inner layers (higher index) shift more, creating depth.
+    let cursorOffsetX = 0
+    let cursorOffsetY = 0
+    if (cursorState) {
+      // Direction from shape center to cursor
+      const fromShape = getShape(config.from as any)
+      const vb = fromShape.viewBox.split(' ').map(Number)
+      const shapeCX = vb[2] / 2
+      const shapeCY = vb[3] / 2
+      // Vector from center toward cursor (in shape units)
+      cursorOffsetX = (cursorState.x - shapeCX) * config.cursorParallax
+      cursorOffsetY = (cursorState.y - shapeCY) * config.cursorParallax
+    }
+
     const paths: string[] = []
     const indices: number[] = []
     for (let i = 0; i < totalSteps; i++) {
       const displaced = displacePoints(
-        basePointSets[i], time, vertexConfig, i, cursorState, pulseState,
+        basePointSets[i], time, vertexConfig, i, pulseState,
       )
-      paths.push(smoothPath(displaced))
+
+      // Apply cursor parallax: shift each layer proportionally to its depth
+      const layerDepth = totalSteps === 1 ? 0 : i / (totalSteps - 1)
+      const shifted = displaced.map(([x, y]) => [
+        x - cursorOffsetX * layerDepth,
+        y - cursorOffsetY * layerDepth,
+      ] as [number, number])
+
+      paths.push(smoothPath(shifted))
       indices.push(i)
     }
 
     const rc = buildRenderConfig(paths)
     rc.stepIndices = indices
     rc.totalStepCount = totalSteps
+
+    // Shift gradient center toward cursor
+    if (cursorState) {
+      const vb2 = getShape(config.from as any).viewBox.split(' ').map(Number)
+      rc.gradientCenterOffset = {
+        x: (cursorState.x - vb2[2] / 2) * config.cursorParallax * 2,
+        y: (cursorState.y - vb2[3] / 2) * config.cursorParallax * 2,
+      }
+    }
+
     render(canvas, rc)
 
     animId = requestAnimationFrame(tick)
@@ -312,8 +342,7 @@ const breatheFolder = gui.addFolder('Breathe')
 breatheFolder.add(config, 'breathingAmplitude', 0, 5, 0.1).name('Breathing Amp')
 breatheFolder.add(config, 'breathingSpeed', 0.1, 2, 0.05).name('Breathing Speed')
 breatheFolder.add(config, 'breathingFrequency', 0.01, 0.3, 0.01).name('Breathing Freq')
-breatheFolder.add(config, 'cursorRepulsion', 0, 10, 0.1).name('Cursor Repulsion')
-breatheFolder.add(config, 'cursorRadius', 20, 500, 10).name('Cursor Radius')
+breatheFolder.add(config, 'cursorParallax', 0, 0.15, 0.005).name('Cursor Parallax')
 breatheFolder.add(config, 'pulseAmplitude', 0, 15, 0.5).name('Pulse Amp')
 breatheFolder.add(config, 'pulseInterval', 1, 10, 0.5).name('Pulse Interval')
 breatheFolder.add(config, 'pulseSharpness', 2, 30, 1).name('Pulse Sharpness')
