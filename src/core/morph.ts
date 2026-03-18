@@ -134,16 +134,19 @@ export function generateMorphSteps(
     maxSegmentLength: 1,
   })
 
-  // All steps use the same smoothed pipeline for visual consistency
-  // (no switching between bezier originals and polygon approximations)
   const steps: string[] = []
   for (let i = 0; i < clamped; i++) {
     const t = clamped === 1 ? 0 : i / (clamped - 1)
-    const sampleT = t === 0 ? 0.001 : t === 1 ? 0.999 : t
-    const rawPoly = interpolator(sampleT)
-    const points = parsePoly(rawPoly)
-    const uniform = resampleUniform(points, 120)
-    steps.push(pointsToSmooth(uniform))
+    if (t === 0) {
+      steps.push(fromPath)
+    } else if (t === 1) {
+      steps.push(toPath)
+    } else {
+      const rawPoly = interpolator(t)
+      const points = parsePoly(rawPoly)
+      const uniform = resampleUniform(points, 120)
+      steps.push(pointsToSmooth(uniform))
+    }
   }
 
   _cache = { key: cacheKey, steps }
@@ -173,10 +176,9 @@ export function createMorphInterpolator(
   })
 
   const fn = (t: number): string => {
-    // Sample slightly inside endpoints to stay in the smoothed pipeline
-    // (avoids flash between original bezier and polygon approximation)
-    const sampleT = t <= 0 ? 0.001 : t >= 1 ? 0.999 : t
-    const rawPoly = flubberInterp(sampleT)
+    if (t <= 0) return fromPath
+    if (t >= 1) return toPath
+    const rawPoly = flubberInterp(t)
     const points = parsePoly(rawPoly)
     const uniform = resampleUniform(points, 120)
     return pointsToSmooth(uniform)
