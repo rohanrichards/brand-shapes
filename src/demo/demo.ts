@@ -30,6 +30,7 @@ const config = {
   cursorRepulsion: DEFAULT_VERTEX_ANIM.cursorRepulsion,
   cursorRadius: DEFAULT_VERTEX_ANIM.cursorRadius,
   pulseAmplitude: DEFAULT_VERTEX_ANIM.pulseAmplitude,
+  pulseInterval: DEFAULT_VERTEX_ANIM.pulseInterval,
   pulseSharpness: DEFAULT_VERTEX_ANIM.pulseSharpness,
   pulseCascadeDelay: DEFAULT_VERTEX_ANIM.pulseCascadeDelay,
   preset: 'Organic Flow',
@@ -217,6 +218,7 @@ function startBreatheAnimation() {
       cursorRepulsion: config.cursorRepulsion,
       cursorRadius: config.cursorRadius,
       pulseAmplitude: config.pulseAmplitude,
+      pulseInterval: config.pulseInterval,
       pulseSharpness: config.pulseSharpness,
       pulseCascadeDelay: config.pulseCascadeDelay,
     }
@@ -310,8 +312,9 @@ const breatheFolder = gui.addFolder('Breathe')
 breatheFolder.add(config, 'breathingAmplitude', 0, 5, 0.1).name('Breathing Amp')
 breatheFolder.add(config, 'breathingSpeed', 0.1, 2, 0.05).name('Breathing Speed')
 breatheFolder.add(config, 'breathingFrequency', 0.01, 0.3, 0.01).name('Breathing Freq')
-breatheFolder.add(config, 'cursorRepulsion', 0, 20, 0.5).name('Cursor Repulsion')
-breatheFolder.add(config, 'cursorRadius', 5, 80, 1).name('Cursor Radius')
-breatheFolder.add(config, 'pulseAmplitude', 0, 15, 0.5).name('Pulse Amp (click)')
+breatheFolder.add(config, 'cursorRepulsion', 0, 10, 0.1).name('Cursor Repulsion')
+breatheFolder.add(config, 'cursorRadius', 20, 500, 10).name('Cursor Radius')
+breatheFolder.add(config, 'pulseAmplitude', 0, 15, 0.5).name('Pulse Amp')
+breatheFolder.add(config, 'pulseInterval', 1, 10, 0.5).name('Pulse Interval')
 breatheFolder.add(config, 'pulseSharpness', 2, 30, 1).name('Pulse Sharpness')
 breatheFolder.add(config, 'pulseCascadeDelay', 0, 0.3, 0.01).name('Cascade Delay')

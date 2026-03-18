@@ -19,6 +19,8 @@ export interface VertexAnimConfig {
   cursorRadius: number
   /** Pulse radial amplitude */
   pulseAmplitude: number
+  /** Natural pulse interval in seconds (automatic heartbeat) */
+  pulseInterval: number
   /** Pulse attack sharpness — higher = snappier */
   pulseSharpness: number
   /** Pulse cascade delay per layer (seconds) */
@@ -29,9 +31,10 @@ export const DEFAULT_VERTEX_ANIM: VertexAnimConfig = {
   breathingAmplitude: 1.5,
   breathingSpeed: 0.4,
   breathingFrequency: 0.08,
-  cursorRepulsion: 8.0,
-  cursorRadius: 30,
+  cursorRepulsion: 3.0,
+  cursorRadius: 200,
   pulseAmplitude: 4.0,
+  pulseInterval: 3.0,
   pulseSharpness: 12,
   pulseCascadeDelay: 0.08,
 }
@@ -80,12 +83,20 @@ export function displacePoints(
   const n = points.length
   const center = centroid(points)
 
-  // --- Pulse strength (from click trigger) ---
-  let pulseStrength = 0
+  // --- Pulse strength ---
+  // Natural heartbeat (automatic, repeating)
+  const layerTime = time - layerIndex * config.pulseCascadeDelay
+  const cycleTime = ((layerTime % config.pulseInterval) + config.pulseInterval) % config.pulseInterval
+  const naturalPulse = impulseEnvelope(cycleTime / config.pulseInterval, config.pulseSharpness)
+
+  // Click-triggered pulse (additive, on top of natural rhythm)
+  let clickPulse = 0
   if (pulse) {
     const elapsed = time - pulse.triggerTime - layerIndex * config.pulseCascadeDelay
-    pulseStrength = impulseEnvelope(elapsed, config.pulseSharpness) * config.pulseAmplitude
+    clickPulse = impulseEnvelope(elapsed, config.pulseSharpness)
   }
+
+  const pulseStrength = (naturalPulse + clickPulse) * config.pulseAmplitude
 
   return points.map((p, i) => {
     const normalizedIndex = i / n
