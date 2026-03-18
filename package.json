@@ -1,0 +1,25 @@
+{
+  "name": "brand-shapes",
+  "version": "0.0.1",
+  "type": "module",
+  "description": "Interactive brand component tool — morphing shapes with gradients, noise, and blur",
+  "main": "dist/brand-shapes.umd.js",
+  "module": "dist/brand-shapes.es.js",
+  "types": "dist/brand-shapes.d.ts",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "gsap": "^3.14.2"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "typescript": "^5.9.3",
+    "vite": "^8.0.0",
+    "vitest": "^4.1.0"
+  }
+}
