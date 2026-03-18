@@ -1,26 +1,30 @@
 /*
  * BRAND SHAPES — Morph Engine
  *
- * Uses GSAP MorphSVGPlugin to interpolate between two SVG paths.
- * Replaces the dead flubber library from slidev-theme-portable.
+ * Uses flubber2 (maintained ESM fork of flubber) for high-quality
+ * SVG path interpolation. flubber uses triangulation-based morphing
+ * that avoids the cusps and self-intersections that occur with
+ * naive control-point interpolation.
+ *
+ * GSAP MorphSVGPlugin's raw path approach (equalizeSegmentQuantity +
+ * linear interpolation) produces sharp kinks when morphing between
+ * topologically different shapes. flubber handles this correctly.
  *
  * Steps clamped to 5-15 per brand rules.
  */
-import gsap from 'gsap'
-import { MorphSVGPlugin } from 'gsap/MorphSVGPlugin'
-
-gsap.registerPlugin(MorphSVGPlugin)
+import { interpolate } from 'flubber2'
 
 export const MIN_STEPS = 5
 export const MAX_STEPS = 15
 
 export interface MorphResult {
   steps: string[]
+  interpolator: (t: number) => string
 }
 
 /**
  * Generate N intermediate SVG path strings between two shapes.
- * Uses GSAP MorphSVGPlugin's raw path utilities for interpolation.
+ * Uses flubber2 for smooth, artifact-free interpolation.
  * Steps clamped to 5-15 per brand rules.
  */
 export function generateMorphSteps(
@@ -30,34 +34,15 @@ export function generateMorphSteps(
 ): MorphResult {
   const clamped = Math.min(MAX_STEPS, Math.max(MIN_STEPS, stepCount))
 
-  const fromRaw = MorphSVGPlugin.stringToRawPath(fromPath)
-  const toRaw = MorphSVGPlugin.stringToRawPath(toPath)
-
-  // Ensure compatible segment counts for interpolation
-  MorphSVGPlugin.equalizeSegmentQuantity(fromRaw, toRaw)
+  const interpolator = interpolate(fromPath, toPath, {
+    maxSegmentLength: 10,
+  })
 
   const steps: string[] = []
   for (let i = 0; i < clamped; i++) {
     const t = clamped === 1 ? 0 : i / (clamped - 1)
-
-    if (t === 0) {
-      steps.push(MorphSVGPlugin.rawPathToString(fromRaw))
-    } else if (t === 1) {
-      steps.push(MorphSVGPlugin.rawPathToString(toRaw))
-    } else {
-      // Linear interpolation of all path values (anchors + control points).
-      // This preserves cubic bezier smoothness because both paths have been
-      // equalized to the same structure by equalizeSegmentQuantity.
-      const interpolated = fromRaw.map((segment: number[], segIdx: number) => {
-        const toSegment = toRaw[segIdx] || segment
-        return segment.map((val: number, valIdx: number) => {
-          const toVal = toSegment[valIdx] ?? val
-          return val + (toVal - val) * t
-        })
-      })
-      steps.push(MorphSVGPlugin.rawPathToString(interpolated))
-    }
+    steps.push(interpolator(t))
   }
 
-  return { steps }
+  return { steps, interpolator }
 }
