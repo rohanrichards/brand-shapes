@@ -73,6 +73,10 @@ function stopAnimation() {
 function startAnimation() {
   stopAnimation()
 
+  // Clear immediately to prevent flash of previous static render
+  const ctx = canvas.getContext('2d')
+  if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height)
+
   const fromShape = getShape(config.from as any)
   const toShape = getShape(config.to as any)
   const interp = createMorphInterpolator(fromShape.path, toShape.path)
