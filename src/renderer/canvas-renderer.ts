@@ -225,9 +225,17 @@ function renderFilled(
 
     ctx.save()
 
-    // Transform into shape-local coordinate space
-    ctx.translate(tx + offsetX, ty + offsetY)
-    ctx.scale(totalScale, totalScale)
+    // Scale from shape center, not top-left:
+    // 1. Translate so shape center is at canvas-space origin
+    // 2. Apply per-step scale
+    // 3. Translate back, plus alignment offset
+    const shapeCenterCanvasX = tx + shapeCenterX * scale
+    const shapeCenterCanvasY = ty + shapeCenterY * scale
+    ctx.translate(shapeCenterCanvasX + offsetX, shapeCenterCanvasY + offsetY)
+    ctx.scale(totalScale / scale, totalScale / scale) // stepScale only (base scale applied below)
+    ctx.translate(-shapeCenterCanvasX, -shapeCenterCanvasY)
+    ctx.translate(tx, ty)
+    ctx.scale(scale, scale)
 
     // Clip to THIS step's shape path
     ctx.clip(new Path2D(steps[i]))
@@ -277,12 +285,14 @@ function renderGradient(
 
     ctx.save()
 
-    if (config.blur.enabled) {
-      ctx.filter = `blur(${config.blur.radius}px)`
-    }
-
-    ctx.translate(tx + offsetX, ty + offsetY)
-    ctx.scale(totalScale, totalScale)
+    // Scale from shape center, not top-left
+    const shapeCenterCanvasX = tx + shapeCenterX * scale
+    const shapeCenterCanvasY = ty + shapeCenterY * scale
+    ctx.translate(shapeCenterCanvasX + offsetX, shapeCenterCanvasY + offsetY)
+    ctx.scale(totalScale / scale, totalScale / scale)
+    ctx.translate(-shapeCenterCanvasX, -shapeCenterCanvasY)
+    ctx.translate(tx, ty)
+    ctx.scale(scale, scale)
     ctx.globalAlpha = Math.max(0.05, opacity)
 
     ctx.clip(new Path2D(steps[i]))
