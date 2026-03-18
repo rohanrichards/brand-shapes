@@ -198,34 +198,42 @@ function renderFilled(
   _height: number,
   vb: number[],
 ): void {
+  // Figma pattern: each step gets its OWN conic gradient, clipped to its shape.
+  // The gradient fills the entire shape independently per step.
+  const shapeCenterX = vb[2] / 2
+  const shapeCenterY = vb[3] / 2
+
   for (let i = 0; i < steps.length; i++) {
-    const path = new Path2D(steps[i])
     const { scale: stepScale, offsetX, offsetY } = computeStepTransform(
       i, steps.length, config.align, config.spread,
     )
-
-    // Compute shape center in canvas space (before transform)
     const totalScale = scale * stepScale
-    const centerCanvasX = (tx + offsetX) + (vb[2] / 2) * totalScale
-    const centerCanvasY = (ty + offsetY) + (vb[3] / 2) * totalScale
 
-    // Create gradient in canvas space so it doesn't get distorted by scale
+    // Per-step angle rotation (Figma uses a full 2D transform matrix per step;
+    // we approximate with angle rotation)
     const angleDeg = 90 + (i / steps.length) * 120
     const angleRad = (angleDeg * Math.PI) / 180
-    const conicGradient = ctx.createConicGradient(angleRad, centerCanvasX, centerCanvasY)
-    // Stops derived from Figma brand exports (GRADIENT_ANGULAR)
-    // SVG1: current@0, accent1@0.293, accent2@0.459, current@1.0
-    // SVG2: current@0, accent1@0.245, accent2@0.808, current@1.0
+
+    ctx.save()
+
+    // Transform into shape-local coordinate space
+    ctx.translate(tx + offsetX, ty + offsetY)
+    ctx.scale(totalScale, totalScale)
+
+    // Clip to THIS step's shape path
+    ctx.clip(new Path2D(steps[i]))
+
+    // Create conic gradient in shape-local space, centered on shape
+    const conicGradient = ctx.createConicGradient(angleRad, shapeCenterX, shapeCenterY)
     conicGradient.addColorStop(0, colours.current)
     conicGradient.addColorStop(0.293, colours.future)
     conicGradient.addColorStop(0.459, colours.catalyst)
     conicGradient.addColorStop(1, colours.current)
 
-    ctx.save()
-    ctx.translate(tx + offsetX, ty + offsetY)
-    ctx.scale(totalScale, totalScale)
+    // Fill entire shape bounds — gradient is clipped to shape by ctx.clip()
     ctx.fillStyle = conicGradient
-    ctx.fill(path)
+    ctx.fillRect(-50, -50, vb[2] + 100, vb[3] + 100)
+
     ctx.restore()
   }
 }
@@ -242,34 +250,34 @@ function renderGradient(
   _height: number,
   vb: number[],
 ): void {
+  const shapeCenterX = vb[2] / 2
+  const shapeCenterY = vb[3] / 2
+
   for (let i = 0; i < steps.length; i++) {
-    const path = new Path2D(steps[i])
     const { scale: stepScale, offsetX, offsetY } = computeStepTransform(
       i, steps.length, config.align, config.spread,
     )
     const opacity = 0.3 + (i / steps.length) * 0.7
-
     const totalScale = scale * stepScale
-    const centerCanvasX = (tx + offsetX) + (vb[2] / 2) * totalScale
-    const centerCanvasY = (ty + offsetY) + (vb[3] / 2) * totalScale
 
     const angleDeg = 90 + (i / steps.length) * 120
     const angleRad = (angleDeg * Math.PI) / 180
-    const conicGradient = ctx.createConicGradient(angleRad, centerCanvasX, centerCanvasY)
-    // Stops derived from Figma brand exports (GRADIENT_ANGULAR)
-    // SVG1: current@0, accent1@0.293, accent2@0.459, current@1.0
-    // SVG2: current@0, accent1@0.245, accent2@0.808, current@1.0
-    conicGradient.addColorStop(0, colours.current)
-    conicGradient.addColorStop(0.293, colours.future)
-    conicGradient.addColorStop(0.459, colours.catalyst)
-    conicGradient.addColorStop(1, colours.current)
 
     ctx.save()
     ctx.translate(tx + offsetX, ty + offsetY)
     ctx.scale(totalScale, totalScale)
     ctx.globalAlpha = opacity
+
+    ctx.clip(new Path2D(steps[i]))
+
+    const conicGradient = ctx.createConicGradient(angleRad, shapeCenterX, shapeCenterY)
+    conicGradient.addColorStop(0, colours.current)
+    conicGradient.addColorStop(0.293, colours.future)
+    conicGradient.addColorStop(0.459, colours.catalyst)
+    conicGradient.addColorStop(1, colours.current)
+
     ctx.fillStyle = conicGradient
-    ctx.fill(path)
+    ctx.fillRect(-50, -50, vb[2] + 100, vb[3] + 100)
     ctx.restore()
   }
   ctx.globalAlpha = 1
