@@ -2,7 +2,8 @@ import GUI from 'lil-gui'
 import { render, type RenderConfig } from '../renderer/canvas-renderer'
 import { shapeNames, getShape } from '../core/shapes'
 import { DEFAULT_NOISE_CONFIG } from '../core/effects'
-import { createMorphInterpolator } from '../core/morph'
+import { createMorphInterpolator, getMorphPoints, smoothPath, type Point } from '../core/morph'
+import { displacePoints, DEFAULT_VERTEX_ANIM, type VertexAnimConfig } from '../core/animate'
 import { presets, presetNames } from './presets'
 
 const config = {
@@ -19,14 +20,23 @@ const config = {
   spread: 1.2,
   scaleFrom: 1.15,
   scaleTo: 0.95,
-  animate: false,
+  // Animation
+  animMode: 'none' as 'none' | 'trail' | 'breathe',
   duration: 2000,
+  // Vertex animation
+  basalAmplitude: DEFAULT_VERTEX_ANIM.basalAmplitude,
+  basalSpeed: DEFAULT_VERTEX_ANIM.basalSpeed,
+  basalFrequency: DEFAULT_VERTEX_ANIM.basalFrequency,
+  bolusAmplitude: DEFAULT_VERTEX_ANIM.bolusAmplitude,
+  bolusSpeed: DEFAULT_VERTEX_ANIM.bolusSpeed,
+  bolusWidth: DEFAULT_VERTEX_ANIM.bolusWidth,
+  bolusInterval: DEFAULT_VERTEX_ANIM.bolusInterval,
   preset: 'Organic Flow',
 }
 
 const canvas = document.getElementById('canvas') as HTMLCanvasElement
 
-// --- Static render ---
+// --- Render helpers ---
 
 function buildRenderConfig(customSteps?: string[]): RenderConfig {
   return {
@@ -53,8 +63,6 @@ function buildRenderConfig(customSteps?: string[]): RenderConfig {
 }
 
 function renderStatic() {
-  // Use the same interpolator pipeline as animation so there's no visual
-  // difference between static and animated renders (prevents pop on transition)
   const fromShape = getShape(config.from as any)
   const toShape = getShape(config.to as any)
   const interp = createMorphInterpolator(fromShape.path, toShape.path)
@@ -74,10 +82,7 @@ function renderStatic() {
   render(canvas, rc)
 }
 
-// --- Morph trail animation ---
-// A lead shape morphs from A→B continuously.
-// At evenly spaced intervals it deposits a frozen snapshot.
-// Each frame renders: frozen layers + the moving lead shape.
+// --- Animation state ---
 
 let animId: number | null = null
 
@@ -88,10 +93,10 @@ function stopAnimation() {
   }
 }
 
-function startAnimation() {
-  stopAnimation()
+// --- Trail animation ---
 
-  // Clear immediately to prevent flash of previous static render
+function startTrailAnimation() {
+  stopAnimation()
   const ctx = canvas.getContext('2d')
   if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height)
 
@@ -102,7 +107,6 @@ function startAnimation() {
   const duration = config.duration
   const startTime = performance.now()
 
-  // Pre-compute the t value for each step
   const stepTs: number[] = []
   for (let i = 0; i < totalSteps; i++) {
     stepTs.push(totalSteps === 1 ? 0 : i / (totalSteps - 1))
@@ -111,14 +115,10 @@ function startAnimation() {
   function tick(now: number) {
     const elapsed = Math.max(0, now - startTime)
     const progress = Math.min(elapsed / duration, 1)
-
-    // Ease: cubic ease-in-out
     const leadT = progress < 0.5
       ? 4 * progress * progress * progress
       : 1 - Math.pow(-2 * progress + 2, 3) / 2
 
-    // Deposit steps that the lead has passed — a step deposits
-    // the instant the lead reaches or passes its t position
     const paths: string[] = []
     const indices: number[] = []
     for (let i = 0; i < totalSteps; i++) {
@@ -128,7 +128,6 @@ function startAnimation() {
       }
     }
 
-    // Add the lead shape at its current position (ahead of or at last deposit)
     const lastDepositedT = paths.length > 0 ? stepTs[paths.length - 1] : 0
     if (leadT > lastDepositedT && progress < 1) {
       paths.push(interp(leadT))
@@ -143,14 +142,75 @@ function startAnimation() {
     if (progress < 1) {
       animId = requestAnimationFrame(tick)
     } else {
-      // Don't call renderStatic() — that uses a different pipeline
-      // which causes a visual pop. Just leave the final frame as-is.
       animId = null
     }
   }
 
-  // Render first frame synchronously to avoid one-frame pop of static render
   tick(startTime)
+}
+
+// --- Breathe animation (vertex displacement) ---
+
+function startBreatheAnimation() {
+  stopAnimation()
+
+  const fromShape = getShape(config.from as any)
+  const toShape = getShape(config.to as any)
+  const totalSteps = config.steps
+
+  // Pre-compute base points for each morph step
+  const basePointSets: Point[][] = []
+  for (let i = 0; i < totalSteps; i++) {
+    const t = totalSteps === 1 ? 0 : i / (totalSteps - 1)
+    basePointSets.push(getMorphPoints(fromShape.path, toShape.path, t))
+  }
+
+  const startTime = performance.now()
+
+  function tick(now: number) {
+    const time = (now - startTime) / 1000 // seconds
+
+    const vertexConfig: VertexAnimConfig = {
+      basalAmplitude: config.basalAmplitude,
+      basalSpeed: config.basalSpeed,
+      basalFrequency: config.basalFrequency,
+      bolusAmplitude: config.bolusAmplitude,
+      bolusSpeed: config.bolusSpeed,
+      bolusWidth: config.bolusWidth,
+      bolusInterval: config.bolusInterval,
+    }
+
+    // Displace each step's points independently with time offsets per layer
+    const paths: string[] = []
+    const indices: number[] = []
+    for (let i = 0; i < totalSteps; i++) {
+      // Each layer gets a slight time offset for organic layered motion
+      const layerTime = time + i * 0.3
+      const displaced = displacePoints(basePointSets[i], layerTime, vertexConfig)
+      paths.push(smoothPath(displaced))
+      indices.push(i)
+    }
+
+    const rc = buildRenderConfig(paths)
+    rc.stepIndices = indices
+    rc.totalStepCount = totalSteps
+    render(canvas, rc)
+
+    animId = requestAnimationFrame(tick)
+  }
+
+  tick(performance.now())
+}
+
+// --- Mode switching ---
+
+function startCurrentMode() {
+  stopAnimation()
+  switch (config.animMode) {
+    case 'trail': startTrailAnimation(); break
+    case 'breathe': startBreatheAnimation(); break
+    default: renderStatic(); break
+  }
 }
 
 // --- Resize ---
@@ -158,7 +218,7 @@ function startAnimation() {
 function handleResize() {
   canvas.style.width = `${window.innerWidth}px`
   canvas.style.height = `${window.innerHeight}px`
-  if (!animId) renderStatic()
+  if (!animId) startCurrentMode()
 }
 
 window.addEventListener('resize', handleResize)
@@ -169,8 +229,7 @@ handleResize()
 const gui = new GUI({ title: 'Brand Shape Controls' })
 
 function onConfigChange() {
-  if (config.animate) startAnimation()
-  else renderStatic()
+  startCurrentMode()
 }
 
 gui.add(config, 'preset', presetNames).name('Preset').onChange((name: string) => {
@@ -187,25 +246,31 @@ shapeFolder.add(config, 'to', shapeNames).name('To').onChange(onConfigChange)
 shapeFolder.add(config, 'steps', 5, 15, 1).name('Steps').onChange(onConfigChange)
 
 const colourFolder = gui.addFolder('Colour')
-colourFolder.add(config, 'scheme', ['lime', 'pink', 'blue', 'vermillion', 'brown']).name('Scheme').onChange(renderStatic)
+colourFolder.add(config, 'scheme', ['lime', 'pink', 'blue', 'vermillion', 'brown']).name('Scheme').onChange(onConfigChange)
 
 const effectsFolder = gui.addFolder('Effects')
-effectsFolder.add(config, 'variant', ['wireframe', 'filled', 'gradient']).name('Variant').onChange(renderStatic)
-effectsFolder.add(config, 'noise').name('Noise').onChange(renderStatic)
-effectsFolder.add(config, 'blur').name('Blur').onChange(renderStatic)
-effectsFolder.add(config, 'noiseOpacity', 0, 0.5, 0.01).name('Noise Opacity').onChange(renderStatic)
-effectsFolder.add(config, 'blurRadius', 0, 10, 0.5).name('Blur Radius').onChange(renderStatic)
+effectsFolder.add(config, 'variant', ['wireframe', 'filled', 'gradient']).name('Variant').onChange(onConfigChange)
+effectsFolder.add(config, 'noise').name('Noise').onChange(onConfigChange)
+effectsFolder.add(config, 'blur').name('Blur').onChange(onConfigChange)
+effectsFolder.add(config, 'noiseOpacity', 0, 0.5, 0.01).name('Noise Opacity').onChange(onConfigChange)
+effectsFolder.add(config, 'blurRadius', 0, 10, 0.5).name('Blur Radius').onChange(onConfigChange)
 
 const layoutFolder = gui.addFolder('Layout')
-layoutFolder.add(config, 'align', ['left', 'right', 'top', 'bottom', 'center']).name('Align').onChange(renderStatic)
-layoutFolder.add(config, 'spread', 0, 10, 0.1).name('Spread').onChange(renderStatic)
-layoutFolder.add(config, 'scaleFrom', 0.5, 2.0, 0.05).name('Scale From').onChange(renderStatic)
-layoutFolder.add(config, 'scaleTo', 0.5, 2.0, 0.05).name('Scale To').onChange(renderStatic)
+layoutFolder.add(config, 'align', ['left', 'right', 'top', 'bottom', 'center']).name('Align').onChange(onConfigChange)
+layoutFolder.add(config, 'spread', 0, 10, 0.1).name('Spread').onChange(onConfigChange)
+layoutFolder.add(config, 'scaleFrom', 0.5, 2.0, 0.05).name('Scale From').onChange(onConfigChange)
+layoutFolder.add(config, 'scaleTo', 0.5, 2.0, 0.05).name('Scale To').onChange(onConfigChange)
 
 const animFolder = gui.addFolder('Animation')
-animFolder.add(config, 'animate').name('Animate').onChange((on: boolean) => {
-  if (on) startAnimation()
-  else { stopAnimation(); renderStatic() }
-})
-animFolder.add(config, 'duration', 500, 5000, 100).name('Duration (ms)')
-animFolder.add({ replay: () => startAnimation() }, 'replay').name('Replay')
+animFolder.add(config, 'animMode', ['none', 'trail', 'breathe']).name('Mode').onChange(onConfigChange)
+animFolder.add(config, 'duration', 500, 5000, 100).name('Trail Duration')
+animFolder.add({ replay: () => { if (config.animMode === 'trail') startTrailAnimation() } }, 'replay').name('Replay Trail')
+
+const breatheFolder = gui.addFolder('Breathe')
+breatheFolder.add(config, 'basalAmplitude', 0, 5, 0.1).name('Wobble Amp')
+breatheFolder.add(config, 'basalSpeed', 0.1, 2, 0.05).name('Wobble Speed')
+breatheFolder.add(config, 'basalFrequency', 0.01, 0.3, 0.01).name('Wobble Freq')
+breatheFolder.add(config, 'bolusAmplitude', 0, 10, 0.5).name('Pulse Amp')
+breatheFolder.add(config, 'bolusSpeed', 0.1, 3, 0.1).name('Pulse Speed')
+breatheFolder.add(config, 'bolusWidth', 0.05, 0.5, 0.01).name('Pulse Width')
+breatheFolder.add(config, 'bolusInterval', 1, 10, 0.5).name('Pulse Interval')

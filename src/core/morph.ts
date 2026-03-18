@@ -110,6 +110,31 @@ function pointsToSmooth(points: Point[]): string {
   return d + 'Z'
 }
 
+/**
+ * Get the base (unanimated) points for a morph interpolation at time t.
+ * Returns uniformly-sampled points that can be displaced for animation.
+ */
+export function getMorphPoints(
+  fromPath: string,
+  toPath: string,
+  t: number,
+): Point[] {
+  const flubberInterp = interpolate(fromPath, toPath, { maxSegmentLength: 1 })
+  const clamped = Math.max(0.001, Math.min(0.999, t))
+  const rawPoly = flubberInterp(clamped)
+  const points = parsePoly(rawPoly)
+  return resampleUniform(points, 120)
+}
+
+/**
+ * Convert points to a smooth SVG path string. Public wrapper.
+ */
+export function smoothPath(points: Point[]): string {
+  return pointsToSmooth(points)
+}
+
+export type { Point }
+
 // Morph cache to avoid recomputing on non-shape parameter changes
 let _cache: { key: string; steps: string[] } | null = null
 
