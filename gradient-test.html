@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Gradient Test — Figma Reference</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #0a0a0a;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      gap: 24px;
+      padding: 24px;
+      font-family: system-ui, sans-serif;
+      color: #fff;
+    }
+    .row { display: flex; gap: 24px; width: 100%; justify-content: center; }
+    .card { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+    .card label { font-size: 11px; opacity: 0.6; max-width: 300px; text-align: center; }
+    canvas { border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <div class="row">
+    <div class="card">
+      <canvas id="figma-blue" width="300" height="300"></canvas>
+      <label>Figma exact: Blue scheme<br>blue → lime(29.3%) → pink(45.9%) → blue</label>
+    </div>
+    <div class="card">
+      <canvas id="figma-verm" width="300" height="300"></canvas>
+      <label>Figma exact: Vermillion scheme<br>verm → lime(24.5%) → pink(80.8%) → verm</label>
+    </div>
+    <div class="card">
+      <canvas id="our-blue" width="300" height="300"></canvas>
+      <label>Our renderer: Blue scheme<br>(using resolveGradientColours)</label>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="card">
+      <canvas id="our-pink" width="300" height="300"></canvas>
+      <label>Our renderer: Pink scheme</label>
+    </div>
+    <div class="card">
+      <canvas id="our-lime" width="300" height="300"></canvas>
+      <label>Our renderer: Lime scheme</label>
+    </div>
+    <div class="card">
+      <canvas id="our-brown" width="300" height="300"></canvas>
+      <label>Our renderer: Brown scheme</label>
+    </div>
+  </div>
+
+  <script type="module">
+    import { render } from './src/renderer/canvas-renderer.ts'
+    import { resolveGradientColours } from './src/core/colours.ts'
+
+    const shapePath = 'M75.3752 3.77916C91.8622 8.7361 94.396 44.7448 98.5631 47.1558C102.73 49.5667 108.356 50.2555 110.93 26.5041C113.504 2.75266 122.262 3.78591 141.847 6.36568C159.483 8.68882 164 38.2414 164 62.1346C164 91.5656 152.151 96.7319 132.054 91.5656C115.373 87.2773 119.177 78.66 98.5631 81.753C90.4104 82.9754 103.201 102.405 71.2552 102.405C60.4342 103.607 34.1612 105.295 15.6109 102.405C-2.93937 99.5143 0.495123 93.4566 0.152346 85.3661C-0.190432 77.2756 0.152346 50.681 0.152346 23.4043C0.152346 6.36568 3.24406 0.166128 15.6109 0.166128C30.552 0.166128 58.8883 -1.17778 75.3752 3.77916Z'
+    const vb = [0, 0, 164, 104]
+
+    // Figma exact reference renders
+    function drawFigmaExact(canvasId, current, accent1, accent1Pos, accent2, accent2Pos) {
+      const canvas = document.getElementById(canvasId)
+      const ctx = canvas.getContext('2d')
+      const scale = 1.6
+      const tx = (300 - vb[2] * scale) / 2
+      const ty = (300 - vb[3] * scale) / 2
+
+      ctx.save()
+      ctx.translate(tx, ty)
+      ctx.scale(scale, scale)
+      const g = ctx.createConicGradient(Math.PI / 2, vb[2] / 2, vb[3] / 2)
+      g.addColorStop(0, current)
+      g.addColorStop(accent1Pos, accent1)
+      g.addColorStop(accent2Pos, accent2)
+      g.addColorStop(1, current)
+      ctx.fillStyle = g
+      ctx.fill(new Path2D(shapePath))
+      ctx.restore()
+    }
+
+    // Figma blue: blue→lime(0.293)→pink(0.459)→blue
+    drawFigmaExact('figma-blue', '#4B01E6', '#BEF958', 0.293, '#FEA6E1', 0.459)
+    // Figma vermillion: verm→lime(0.245)→pink(0.808)→verm
+    drawFigmaExact('figma-verm', '#EE4811', '#BEF958', 0.245, '#FEA6E1', 0.808)
+
+    // Our renderer with all schemes
+    const baseConfig = {
+      from: 'organic-1', to: 'angular-3', steps: 8,
+      variant: 'filled',
+      noise: { enabled: false, opacity: 0.12, size: 256 },
+      blur: { enabled: false, radius: 2 },
+      align: 'center', spread: 1,
+    }
+
+    render(document.getElementById('our-blue'), { ...baseConfig, scheme: 'blue' })
+    render(document.getElementById('our-pink'), { ...baseConfig, scheme: 'pink' })
+    render(document.getElementById('our-lime'), { ...baseConfig, scheme: 'lime' })
+    render(document.getElementById('our-brown'), { ...baseConfig, scheme: 'brown' })
+  </script>
+</body>
+</html>

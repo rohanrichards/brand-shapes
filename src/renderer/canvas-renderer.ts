@@ -8,7 +8,7 @@
  * - ImageData for noise texture overlay
  */
 import { type ShapeName, getShape } from '../core/shapes'
-import { type ColourFamily, resolveScheme } from '../core/colours'
+import { type ColourFamily, resolveScheme, resolveGradientColours } from '../core/colours'
 import { generateMorphSteps } from '../core/morph'
 import {
   generateStepFills,
@@ -106,6 +106,7 @@ export function render(canvas: HTMLCanvasElement, config: RenderConfig): void {
   const toShape = getShape(config.to)
   const { steps } = generateMorphSteps(fromShape.path, toShape.path, config.steps)
   const colours = resolveScheme(config.scheme)
+  const gradientColours = resolveGradientColours(config.scheme)
 
   // Apply blur if enabled
   if (config.blur.enabled) {
@@ -127,10 +128,10 @@ export function render(canvas: HTMLCanvasElement, config: RenderConfig): void {
       renderWireframe(ctx, steps, colours, scaleFactor, translateX, translateY, width, height)
       break
     case 'filled':
-      renderFilled(ctx, steps, colours, config, scaleFactor, translateX, translateY, width, height, vb)
+      renderFilled(ctx, steps, gradientColours, config, scaleFactor, translateX, translateY, width, height, vb)
       break
     case 'gradient':
-      renderGradient(ctx, steps, colours, config, scaleFactor, translateX, translateY, width, height, vb)
+      renderGradient(ctx, steps, gradientColours, config, scaleFactor, translateX, translateY, width, height, vb)
       break
   }
 
@@ -212,12 +213,12 @@ function renderFilled(
     const angleDeg = 90 + (i / steps.length) * 120
     const angleRad = (angleDeg * Math.PI) / 180
     const conicGradient = ctx.createConicGradient(angleRad, centerCanvasX, centerCanvasY)
+    // Stops derived from Figma brand exports (GRADIENT_ANGULAR)
+    // SVG1: current@0, accent1@0.293, accent2@0.459, current@1.0
+    // SVG2: current@0, accent1@0.245, accent2@0.808, current@1.0
     conicGradient.addColorStop(0, colours.current)
-    conicGradient.addColorStop(0.40, colours.current)
-    conicGradient.addColorStop(0.45, colours.catalyst)
-    conicGradient.addColorStop(0.55, colours.catalyst)
-    conicGradient.addColorStop(0.60, colours.future)
-    conicGradient.addColorStop(0.95, colours.future)
+    conicGradient.addColorStop(0.293, colours.future)
+    conicGradient.addColorStop(0.459, colours.catalyst)
     conicGradient.addColorStop(1, colours.current)
 
     ctx.save()
@@ -255,12 +256,12 @@ function renderGradient(
     const angleDeg = 90 + (i / steps.length) * 120
     const angleRad = (angleDeg * Math.PI) / 180
     const conicGradient = ctx.createConicGradient(angleRad, centerCanvasX, centerCanvasY)
+    // Stops derived from Figma brand exports (GRADIENT_ANGULAR)
+    // SVG1: current@0, accent1@0.293, accent2@0.459, current@1.0
+    // SVG2: current@0, accent1@0.245, accent2@0.808, current@1.0
     conicGradient.addColorStop(0, colours.current)
-    conicGradient.addColorStop(0.40, colours.current)
-    conicGradient.addColorStop(0.45, colours.catalyst)
-    conicGradient.addColorStop(0.55, colours.catalyst)
-    conicGradient.addColorStop(0.60, colours.future)
-    conicGradient.addColorStop(0.95, colours.future)
+    conicGradient.addColorStop(0.293, colours.future)
+    conicGradient.addColorStop(0.459, colours.catalyst)
     conicGradient.addColorStop(1, colours.current)
 
     ctx.save()

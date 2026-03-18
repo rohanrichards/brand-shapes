@@ -79,3 +79,36 @@ const textPairings: Record<ColourFamily, { onLight: string; onDark: string }> = 
 export function resolveTextPairing(family: ColourFamily) {
   return textPairings[family]
 }
+
+/**
+ * Cross-family gradient colours for the conic/angular gradient.
+ * Derived from Figma brand exports (GRADIENT_ANGULAR).
+ *
+ * The brand uses the scheme's MID-TONE as the dominant colour,
+ * with two CROSS-FAMILY saturated accents — NOT dark/mid/light
+ * of a single family. This creates the vibrant, high-contrast
+ * angular gradients seen in the brand guidelines.
+ *
+ * Figma reference:
+ *   Blue scheme:       blue → lime → pink → blue
+ *   Vermillion scheme: vermillion → lime → pink → vermillion
+ */
+const ACCENT_PINK = '#FEA6E1' // brand rose accent (from Figma exports)
+
+const gradientColours: Record<ColourFamily, GradientColours> = {
+  // Figma-confirmed:
+  blue:       { current: colourMap['blue'],       catalyst: ACCENT_PINK,           future: colourMap['lime'] },
+  vermillion: { current: colourMap['vermillion'], catalyst: ACCENT_PINK,           future: colourMap['lime'] },
+  // Extrapolated from brand pattern (primary + cross-family accents):
+  lime:       { current: colourMap['lime'],       catalyst: ACCENT_PINK,           future: colourMap['blue'] },
+  pink:       { current: colourMap['pink'],       catalyst: colourMap['lime'],      future: colourMap['blue'] },
+  brown:      { current: colourMap['brown'],      catalyst: ACCENT_PINK,           future: colourMap['lime'] },
+}
+
+/**
+ * Returns gradient colours for the conic gradient — cross-family,
+ * all saturated, no light/pale variants.
+ */
+export function resolveGradientColours(family: ColourFamily): GradientColours {
+  return gradientColours[family]
+}
