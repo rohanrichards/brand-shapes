@@ -27,11 +27,10 @@ const config = {
   breathingAmplitude: DEFAULT_VERTEX_ANIM.breathingAmplitude,
   breathingSpeed: DEFAULT_VERTEX_ANIM.breathingSpeed,
   breathingFrequency: DEFAULT_VERTEX_ANIM.breathingFrequency,
-  bolusAmplitude: DEFAULT_VERTEX_ANIM.bolusAmplitude,
-  bolusSpeed: DEFAULT_VERTEX_ANIM.bolusSpeed,
-  bolusWidth: DEFAULT_VERTEX_ANIM.bolusWidth,
-  bolusInterval: DEFAULT_VERTEX_ANIM.bolusInterval,
-  bolusPause: DEFAULT_VERTEX_ANIM.bolusPause,
+  pulseAmplitude: DEFAULT_VERTEX_ANIM.pulseAmplitude,
+  pulseInterval: DEFAULT_VERTEX_ANIM.pulseInterval,
+  pulseSharpness: DEFAULT_VERTEX_ANIM.pulseSharpness,
+  pulseCascadeDelay: DEFAULT_VERTEX_ANIM.pulseCascadeDelay,
   preset: 'Organic Flow',
 }
 
@@ -175,20 +174,17 @@ function startBreatheAnimation() {
       breathingAmplitude: config.breathingAmplitude,
       breathingSpeed: config.breathingSpeed,
       breathingFrequency: config.breathingFrequency,
-      bolusAmplitude: config.bolusAmplitude,
-      bolusSpeed: config.bolusSpeed,
-      bolusWidth: config.bolusWidth,
-      bolusInterval: config.bolusInterval,
-      bolusPause: config.bolusPause,
+      pulseAmplitude: config.pulseAmplitude,
+      pulseInterval: config.pulseInterval,
+      pulseSharpness: config.pulseSharpness,
+      pulseCascadeDelay: config.pulseCascadeDelay,
     }
 
-    // Displace each step's points independently with time offsets per layer
+    // Displace each step's points — pulse cascades through layers via layerIndex
     const paths: string[] = []
     const indices: number[] = []
     for (let i = 0; i < totalSteps; i++) {
-      // Each layer gets a slight time offset for organic layered motion
-      const layerTime = time + i * 0.3
-      const displaced = displacePoints(basePointSets[i], layerTime, vertexConfig)
+      const displaced = displacePoints(basePointSets[i], time, vertexConfig, i)
       paths.push(smoothPath(displaced))
       indices.push(i)
     }
@@ -272,8 +268,7 @@ const breatheFolder = gui.addFolder('Breathe')
 breatheFolder.add(config, 'breathingAmplitude', 0, 5, 0.1).name('Breathing Amp')
 breatheFolder.add(config, 'breathingSpeed', 0.1, 2, 0.05).name('Breathing Speed')
 breatheFolder.add(config, 'breathingFrequency', 0.01, 0.3, 0.01).name('Breathing Freq')
-breatheFolder.add(config, 'bolusAmplitude', 0, 10, 0.5).name('Pulse Amp')
-breatheFolder.add(config, 'bolusSpeed', 0.1, 3, 0.1).name('Pulse Speed')
-breatheFolder.add(config, 'bolusWidth', 0.05, 0.5, 0.01).name('Pulse Width')
-breatheFolder.add(config, 'bolusInterval', 1, 10, 0.5).name('Pulse Interval')
-breatheFolder.add(config, 'bolusPause', 0, 0.9, 0.05).name('Pulse Pause')
+breatheFolder.add(config, 'pulseAmplitude', 0, 15, 0.5).name('Pulse Amp')
+breatheFolder.add(config, 'pulseInterval', 1, 10, 0.5).name('Pulse Interval')
+breatheFolder.add(config, 'pulseSharpness', 2, 30, 1).name('Pulse Sharpness')
+breatheFolder.add(config, 'pulseCascadeDelay', 0, 0.3, 0.01).name('Cascade Delay')
