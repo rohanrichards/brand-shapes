@@ -154,3 +154,38 @@ export function generateMorphSteps(
   _cache = { key: cacheKey, steps }
   return { steps }
 }
+
+// Interpolator cache
+let _interpCache: { key: string; fn: (t: number) => string } | null = null
+
+/**
+ * Create a continuous morph interpolator function.
+ * Returns (t: number) => svgPathString for any t in [0, 1].
+ * The interpolator is cached per from/to pair.
+ */
+export function createMorphInterpolator(
+  fromPath: string,
+  toPath: string,
+): (t: number) => string {
+  const cacheKey = `${fromPath}|${toPath}`
+
+  if (_interpCache && _interpCache.key === cacheKey) {
+    return _interpCache.fn
+  }
+
+  const flubberInterp = interpolate(fromPath, toPath, {
+    maxSegmentLength: 1,
+  })
+
+  const fn = (t: number): string => {
+    if (t <= 0) return fromPath
+    if (t >= 1) return toPath
+    const rawPoly = flubberInterp(t)
+    const points = parsePoly(rawPoly)
+    const uniform = resampleUniform(points, 120)
+    return pointsToSmooth(uniform)
+  }
+
+  _interpCache = { key: cacheKey, fn }
+  return fn
+}

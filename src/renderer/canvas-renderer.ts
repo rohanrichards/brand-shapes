@@ -34,6 +34,10 @@ export interface RenderConfig {
   spread: number
   scaleFrom: number
   scaleTo: number
+  /** How many steps to render (for animation). Defaults to all steps. */
+  visibleSteps?: number
+  /** Override the generated morph steps with custom path strings (for animation). */
+  customSteps?: string[]
 }
 
 export const DEFAULT_CONFIG: RenderConfig = {
@@ -110,7 +114,14 @@ export function render(canvas: HTMLCanvasElement, config: RenderConfig): void {
 
   const fromShape = getShape(config.from)
   const toShape = getShape(config.to)
-  const { steps } = generateMorphSteps(fromShape.path, toShape.path, config.steps)
+  let steps: string[]
+  if (config.customSteps) {
+    steps = config.customSteps
+  } else {
+    const { steps: allSteps } = generateMorphSteps(fromShape.path, toShape.path, config.steps)
+    const visCount = config.visibleSteps != null ? Math.min(config.visibleSteps, allSteps.length) : allSteps.length
+    steps = allSteps.slice(0, visCount)
+  }
   const colours = resolveScheme(config.scheme)
   const gradientColours = resolveGradientColours(config.scheme)
 

@@ -1,37 +1,35 @@
 import GUI from 'lil-gui'
 import { render, type RenderConfig } from '../renderer/canvas-renderer'
-import { shapeNames } from '../core/shapes'
+import { shapeNames, getShape } from '../core/shapes'
 import { DEFAULT_NOISE_CONFIG } from '../core/effects'
+import { createMorphInterpolator } from '../core/morph'
 import { presets, presetNames } from './presets'
 
-// Config object that lil-gui mutates directly
 const config = {
-  // Shape
   from: 'organic-1',
   to: 'angular-3',
   steps: 8,
-  // Colour
   scheme: 'blue',
-  // Effects
   variant: 'filled' as 'wireframe' | 'filled' | 'gradient',
   noise: true,
   blur: false,
   noiseOpacity: 0.08,
   blurRadius: 2,
-  // Layout
   align: 'right' as 'left' | 'right' | 'top' | 'bottom' | 'center',
   spread: 1.2,
   scaleFrom: 1.15,
   scaleTo: 0.95,
-  // Presets
+  animate: false,
+  duration: 2000,
   preset: 'Organic Flow',
 }
 
-// Canvas setup
 const canvas = document.getElementById('canvas') as HTMLCanvasElement
 
-function renderFromConfig() {
-  const renderConfig: RenderConfig = {
+// --- Static render ---
+
+function buildRenderConfig(customSteps?: string[]): RenderConfig {
+  return {
     from: config.from as any,
     to: config.to as any,
     steps: config.steps,
@@ -50,53 +48,132 @@ function renderFromConfig() {
     spread: config.spread,
     scaleFrom: config.scaleFrom,
     scaleTo: config.scaleTo,
+    customSteps: customSteps,
   }
-  render(canvas, renderConfig)
 }
 
-// Resize handling
+function renderStatic() {
+  render(canvas, buildRenderConfig())
+}
+
+// --- Morph trail animation ---
+// A lead shape morphs from A→B continuously.
+// At evenly spaced intervals it deposits a frozen snapshot.
+// Each frame renders: frozen layers + the moving lead shape.
+
+let animId: number | null = null
+
+function stopAnimation() {
+  if (animId != null) {
+    cancelAnimationFrame(animId)
+    animId = null
+  }
+}
+
+function startAnimation() {
+  stopAnimation()
+
+  const fromShape = getShape(config.from as any)
+  const toShape = getShape(config.to as any)
+  const interp = createMorphInterpolator(fromShape.path, toShape.path)
+  const totalSteps = config.steps
+  const duration = config.duration
+  const startTime = performance.now()
+
+  // Each step deposits at this interval
+  const depositInterval = duration / totalSteps
+
+  function tick(now: number) {
+    const elapsed = now - startTime
+    const progress = Math.min(elapsed / duration, 1)
+
+    // Ease: cubic ease-in-out
+    const eased = progress < 0.5
+      ? 4 * progress * progress * progress
+      : 1 - Math.pow(-2 * progress + 2, 3) / 2
+
+    // How many steps have been deposited so far
+    const deposited = Math.min(Math.floor(elapsed / depositInterval), totalSteps)
+
+    // Build the frozen snapshots at their final t values
+    const frozenSteps: string[] = []
+    for (let i = 0; i < deposited; i++) {
+      const stepT = totalSteps === 1 ? 0 : i / (totalSteps - 1)
+      frozenSteps.push(interp(stepT))
+    }
+
+    // Add the lead shape at the current animated position
+    // The lead is ahead of the last deposited step
+    const leadT = eased
+    frozenSteps.push(interp(leadT))
+
+    render(canvas, buildRenderConfig(frozenSteps))
+
+    if (progress < 1) {
+      animId = requestAnimationFrame(tick)
+    } else {
+      // Animation complete — render the final static state
+      animId = null
+      renderStatic()
+    }
+  }
+
+  animId = requestAnimationFrame(tick)
+}
+
+// --- Resize ---
+
 function handleResize() {
   canvas.style.width = `${window.innerWidth}px`
   canvas.style.height = `${window.innerHeight}px`
-  renderFromConfig()
+  if (!animId) renderStatic()
 }
 
 window.addEventListener('resize', handleResize)
 handleResize()
 
-// lil-gui setup
+// --- lil-gui ---
+
 const gui = new GUI({ title: 'Brand Shape Controls' })
 
-// Presets
+function onConfigChange() {
+  if (config.animate) startAnimation()
+  else renderStatic()
+}
+
 gui.add(config, 'preset', presetNames).name('Preset').onChange((name: string) => {
   const preset = presets[name]
   if (!preset) return
   Object.assign(config, preset)
   gui.controllersRecursive().forEach(c => c.updateDisplay())
-  renderFromConfig()
+  onConfigChange()
 })
 
-// Shape folder
 const shapeFolder = gui.addFolder('Shape')
-shapeFolder.add(config, 'from', shapeNames).name('From').onChange(renderFromConfig)
-shapeFolder.add(config, 'to', shapeNames).name('To').onChange(renderFromConfig)
-shapeFolder.add(config, 'steps', 5, 15, 1).name('Steps').onChange(renderFromConfig)
+shapeFolder.add(config, 'from', shapeNames).name('From').onChange(onConfigChange)
+shapeFolder.add(config, 'to', shapeNames).name('To').onChange(onConfigChange)
+shapeFolder.add(config, 'steps', 5, 15, 1).name('Steps').onChange(onConfigChange)
 
-// Colour folder
 const colourFolder = gui.addFolder('Colour')
-colourFolder.add(config, 'scheme', ['lime', 'pink', 'blue', 'vermillion', 'brown']).name('Scheme').onChange(renderFromConfig)
+colourFolder.add(config, 'scheme', ['lime', 'pink', 'blue', 'vermillion', 'brown']).name('Scheme').onChange(renderStatic)
 
-// Effects folder
 const effectsFolder = gui.addFolder('Effects')
-effectsFolder.add(config, 'variant', ['wireframe', 'filled', 'gradient']).name('Variant').onChange(renderFromConfig)
-effectsFolder.add(config, 'noise').name('Noise').onChange(renderFromConfig)
-effectsFolder.add(config, 'blur').name('Blur').onChange(renderFromConfig)
-effectsFolder.add(config, 'noiseOpacity', 0, 0.5, 0.01).name('Noise Opacity').onChange(renderFromConfig)
-effectsFolder.add(config, 'blurRadius', 0, 10, 0.5).name('Blur Radius').onChange(renderFromConfig)
+effectsFolder.add(config, 'variant', ['wireframe', 'filled', 'gradient']).name('Variant').onChange(renderStatic)
+effectsFolder.add(config, 'noise').name('Noise').onChange(renderStatic)
+effectsFolder.add(config, 'blur').name('Blur').onChange(renderStatic)
+effectsFolder.add(config, 'noiseOpacity', 0, 0.5, 0.01).name('Noise Opacity').onChange(renderStatic)
+effectsFolder.add(config, 'blurRadius', 0, 10, 0.5).name('Blur Radius').onChange(renderStatic)
 
-// Layout folder
 const layoutFolder = gui.addFolder('Layout')
-layoutFolder.add(config, 'align', ['left', 'right', 'top', 'bottom', 'center']).name('Align').onChange(renderFromConfig)
-layoutFolder.add(config, 'spread', 0, 10, 0.1).name('Spread').onChange(renderFromConfig)
-layoutFolder.add(config, 'scaleFrom', 0.5, 2.0, 0.05).name('Scale From').onChange(renderFromConfig)
-layoutFolder.add(config, 'scaleTo', 0.5, 2.0, 0.05).name('Scale To').onChange(renderFromConfig)
+layoutFolder.add(config, 'align', ['left', 'right', 'top', 'bottom', 'center']).name('Align').onChange(renderStatic)
+layoutFolder.add(config, 'spread', 0, 10, 0.1).name('Spread').onChange(renderStatic)
+layoutFolder.add(config, 'scaleFrom', 0.5, 2.0, 0.05).name('Scale From').onChange(renderStatic)
+layoutFolder.add(config, 'scaleTo', 0.5, 2.0, 0.05).name('Scale To').onChange(renderStatic)
+
+const animFolder = gui.addFolder('Animation')
+animFolder.add(config, 'animate').name('Animate').onChange((on: boolean) => {
+  if (on) startAnimation()
+  else { stopAnimation(); renderStatic() }
+})
+animFolder.add(config, 'duration', 500, 5000, 100).name('Duration (ms)')
+animFolder.add({ replay: () => startAnimation() }, 'replay').name('Replay')
