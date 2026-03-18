@@ -34,8 +34,12 @@ export function generateMorphSteps(
 ): MorphResult {
   const clamped = Math.min(MAX_STEPS, Math.max(MIN_STEPS, stepCount))
 
+  // maxSegmentLength controls polygon resolution.
+  // flubber converts bezier curves to polygons for triangulation.
+  // Lower values = more points = smoother edges but more data.
+  // At 2, a 160-unit shape gets ~80 segments — smooth at any zoom.
   const interpolator = interpolate(fromPath, toPath, {
-    maxSegmentLength: 10,
+    maxSegmentLength: 2,
   })
 
   const steps: string[] = []
