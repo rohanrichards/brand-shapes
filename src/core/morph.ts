@@ -53,6 +53,10 @@ export function generateMorphSteps(
           return val + (toVal - val) * t
         })
       })
+      // Smooth the interpolated path to restore bezier curve quality.
+      // Without this, linear interpolation of control points produces
+      // harsh corners in intermediate morph steps.
+      MorphSVGPlugin.smoothRawPath(interpolated, 1)
       steps.push(MorphSVGPlugin.rawPathToString(interpolated))
     }
   }
