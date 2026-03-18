@@ -1,0 +1,112 @@
+import { LitElement, html, css, type PropertyValues } from 'lit'
+import { render, type RenderConfig, type Variant, type Alignment } from '../renderer/canvas-renderer'
+import { DEFAULT_NOISE_CONFIG } from '../core/effects'
+import type { ShapeName } from '../core/shapes'
+import type { ColourFamily } from '../core/colours'
+
+export class BrandShape extends LitElement {
+  static override styles = css`
+    :host {
+      display: block;
+      width: 400px;
+      height: 400px;
+    }
+    canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+  `
+
+  static override properties = {
+    from: { type: String },
+    to: { type: String },
+    steps: { type: Number },
+    scheme: { type: String },
+    variant: { type: String },
+    noiseEnabled: { type: Boolean, attribute: 'noise' },
+    blurEnabled: { type: Boolean, attribute: 'blur' },
+    animateEnabled: { type: Boolean, attribute: 'animate' },
+    trigger: { type: String },
+    duration: { type: Number },
+    align: { type: String },
+    spread: { type: Number },
+    noiseOpacity: { type: Number, attribute: 'noise-opacity' },
+    blurRadius: { type: Number, attribute: 'blur-radius' },
+  }
+
+  from: ShapeName = 'organic-1'
+  to: ShapeName = 'angular-3'
+  steps = 8
+  scheme: ColourFamily = 'lime'
+  variant: Variant = 'filled'
+  noiseEnabled = false
+  blurEnabled = false
+  animateEnabled = false
+  trigger: 'enter' | 'click' = 'enter'
+  duration = 1500
+  align: Alignment = 'center'
+  spread = 1
+  noiseOpacity = 0.12
+  blurRadius = 2
+
+  private _canvas: HTMLCanvasElement | null = null
+  private _resizeObserver: ResizeObserver | null = null
+
+  override render() {
+    return html`<canvas></canvas>`
+  }
+
+  override firstUpdated() {
+    this._canvas = this.shadowRoot!.querySelector('canvas')!
+    this._resizeObserver = new ResizeObserver(() => this._renderShape())
+    this._resizeObserver.observe(this)
+  }
+
+  override updated(_changed: PropertyValues) {
+    if (this._canvas) {
+      requestAnimationFrame(() => this._renderShape())
+    }
+  }
+
+  override disconnectedCallback() {
+    super.disconnectedCallback()
+    this._resizeObserver?.disconnect()
+  }
+
+  private _buildConfig(): RenderConfig {
+    return {
+      from: this.from,
+      to: this.to,
+      steps: this.steps,
+      scheme: this.scheme,
+      variant: this.variant,
+      noise: {
+        enabled: this.noiseEnabled,
+        opacity: this.noiseOpacity,
+        size: DEFAULT_NOISE_CONFIG.size,
+      },
+      blur: {
+        enabled: this.blurEnabled,
+        radius: this.blurRadius,
+      },
+      align: this.align,
+      spread: this.spread,
+    }
+  }
+
+  private _renderShape() {
+    if (!this._canvas) return
+    const rect = this.getBoundingClientRect()
+    if (rect.width === 0 || rect.height === 0) return
+    render(this._canvas, this._buildConfig())
+  }
+}
+
+customElements.define('brand-shape', BrandShape)
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'brand-shape': BrandShape
+  }
+}

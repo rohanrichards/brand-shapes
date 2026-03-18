@@ -19,3 +19,5 @@ export type { ConicGradientConfig, GradientStop, NoiseConfig, BlurConfig } from 
 
 export { render, DEFAULT_CONFIG } from './renderer/canvas-renderer'
 export type { RenderConfig, Variant, Alignment } from './renderer/canvas-renderer'
+
+export { BrandShape } from './component/brand-shape'

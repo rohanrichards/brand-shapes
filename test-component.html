@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Brand Shapes — Web Component Test</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #0a0a0a;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      gap: 32px;
+      padding: 32px;
+      font-family: system-ui, sans-serif;
+      color: #fff;
+    }
+    .card {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+    .card label {
+      font-size: 12px;
+      opacity: 0.6;
+    }
+    brand-shape {
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <brand-shape
+      from="organic-1"
+      to="angular-3"
+      scheme="lime"
+      variant="wireframe"
+    ></brand-shape>
+    <label>Wireframe — lime (defaults)</label>
+  </div>
+
+  <div class="card">
+    <brand-shape
+      from="primitive-2"
+      to="organic-4"
+      steps="10"
+      scheme="pink"
+      variant="filled"
+      align="right"
+      spread="1.2"
+      style="width: 500px; height: 500px;"
+    ></brand-shape>
+    <label>Filled — pink (custom size via CSS)</label>
+  </div>
+
+  <div class="card">
+    <brand-shape
+      from="angular-1"
+      to="organic-2"
+      steps="12"
+      scheme="blue"
+      variant="gradient"
+      noise
+      blur
+      align="left"
+      spread="1.5"
+    ></brand-shape>
+    <label>Gradient — blue (noise + blur)</label>
+  </div>
+
+  <div class="card">
+    <brand-shape
+      from="organic-3"
+      to="primitive-1"
+      scheme="vermillion"
+      variant="filled"
+      steps="8"
+    ></brand-shape>
+    <label>Filled — vermillion</label>
+  </div>
+
+  <div class="card">
+    <brand-shape
+      from="angular-2"
+      to="angular-4"
+      scheme="brown"
+      variant="filled"
+      noise
+      spread="1.8"
+      align="bottom"
+    ></brand-shape>
+    <label>Filled — brown (noise, spread 1.8)</label>
+  </div>
+
+  <script type="module">
+    import './src/component/brand-shape.ts'
+  </script>
+</body>
+</html>
