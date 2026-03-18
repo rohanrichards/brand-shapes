@@ -1,7 +1,7 @@
 import GUI from 'lil-gui'
 import { render, type RenderConfig } from '../renderer/canvas-renderer'
 import { shapeNames } from '../core/shapes'
-import { DEFAULT_NOISE_CONFIG, DEFAULT_BLUR_CONFIG } from '../core/effects'
+import { DEFAULT_NOISE_CONFIG } from '../core/effects'
 import { presets, presetNames } from './presets'
 
 // Config object that lil-gui mutates directly
@@ -21,6 +21,8 @@ const config = {
   // Layout
   align: 'right' as 'left' | 'right' | 'top' | 'bottom' | 'center',
   spread: 1.2,
+  scaleFrom: 1.15,
+  scaleTo: 0.95,
   // Presets
   preset: 'Organic Flow',
 }
@@ -46,6 +48,8 @@ function renderFromConfig() {
     },
     align: config.align,
     spread: config.spread,
+    scaleFrom: config.scaleFrom,
+    scaleTo: config.scaleTo,
   }
   render(canvas, renderConfig)
 }
@@ -93,4 +97,6 @@ effectsFolder.add(config, 'blurRadius', 0, 10, 0.5).name('Blur Radius').onChange
 // Layout folder
 const layoutFolder = gui.addFolder('Layout')
 layoutFolder.add(config, 'align', ['left', 'right', 'top', 'bottom', 'center']).name('Align').onChange(renderFromConfig)
-layoutFolder.add(config, 'spread', 0.5, 3, 0.1).name('Spread').onChange(renderFromConfig)
+layoutFolder.add(config, 'spread', 0, 10, 0.1).name('Spread').onChange(renderFromConfig)
+layoutFolder.add(config, 'scaleFrom', 0.5, 2.0, 0.05).name('Scale From').onChange(renderFromConfig)
+layoutFolder.add(config, 'scaleTo', 0.5, 2.0, 0.05).name('Scale To').onChange(renderFromConfig)

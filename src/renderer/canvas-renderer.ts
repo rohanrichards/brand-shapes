@@ -32,6 +32,8 @@ export interface RenderConfig {
   blur: BlurConfig
   align: Alignment
   spread: number
+  scaleFrom: number
+  scaleTo: number
 }
 
 export const DEFAULT_CONFIG: RenderConfig = {
@@ -44,6 +46,8 @@ export const DEFAULT_CONFIG: RenderConfig = {
   blur: { ...DEFAULT_BLUR_CONFIG },
   align: 'center',
   spread: 1,
+  scaleFrom: 1.15,
+  scaleTo: 0.95,
 }
 
 /** Generate a noise ImageData texture for overlay compositing. */
@@ -69,9 +73,11 @@ function computeStepTransform(
   totalSteps: number,
   align: Alignment,
   spread: number,
+  scaleFrom: number,
+  scaleTo: number,
 ): { scale: number; offsetX: number; offsetY: number } {
   const t = totalSteps === 1 ? 0 : stepIndex / (totalSteps - 1)
-  const scale = 1.15 - t * 0.2
+  const scale = scaleFrom + (scaleTo - scaleFrom) * t
   const maxOffset = 15 * spread
   const offset = (1 - t) * maxOffset
 
@@ -108,12 +114,7 @@ export function render(canvas: HTMLCanvasElement, config: RenderConfig): void {
   const colours = resolveScheme(config.scheme)
   const gradientColours = resolveGradientColours(config.scheme)
 
-  // Apply blur if enabled
-  if (config.blur.enabled) {
-    ctx.filter = `blur(${config.blur.radius}px)`
-  } else {
-    ctx.filter = 'none'
-  }
+  // Blur is applied per-step inside each renderer (inside save/restore)
 
   // Parse viewBox for coordinate mapping (use from shape's viewBox)
   const vb = fromShape.viewBox.split(' ').map(Number)
@@ -205,7 +206,7 @@ function renderFilled(
 
   for (let i = 0; i < steps.length; i++) {
     const { scale: stepScale, offsetX, offsetY } = computeStepTransform(
-      i, steps.length, config.align, config.spread,
+      i, steps.length, config.align, config.spread, config.scaleFrom, config.scaleTo,
     )
     const totalScale = scale * stepScale
 
@@ -215,6 +216,11 @@ function renderFilled(
     const angleRad = (angleDeg * Math.PI) / 180
 
     ctx.save()
+
+    // Apply blur per-step (inside save/restore so it doesn't leak)
+    if (config.blur.enabled) {
+      ctx.filter = `blur(${config.blur.radius}px)`
+    }
 
     // Transform into shape-local coordinate space
     ctx.translate(tx + offsetX, ty + offsetY)
@@ -255,18 +261,26 @@ function renderGradient(
 
   for (let i = 0; i < steps.length; i++) {
     const { scale: stepScale, offsetX, offsetY } = computeStepTransform(
-      i, steps.length, config.align, config.spread,
+      i, steps.length, config.align, config.spread, config.scaleFrom, config.scaleTo,
     )
-    const opacity = 0.3 + (i / steps.length) * 0.7
+    // More dramatic opacity ramp than filled — back layers nearly transparent,
+    // front layers fully opaque, creating a glowing depth-of-field effect
+    const t = steps.length === 1 ? 1 : i / (steps.length - 1)
+    const opacity = t * t // quadratic: 0, 0.01, 0.04, ... 0.64, 1.0
     const totalScale = scale * stepScale
 
     const angleDeg = 90 + (i / steps.length) * 120
     const angleRad = (angleDeg * Math.PI) / 180
 
     ctx.save()
+
+    if (config.blur.enabled) {
+      ctx.filter = `blur(${config.blur.radius}px)`
+    }
+
     ctx.translate(tx + offsetX, ty + offsetY)
     ctx.scale(totalScale, totalScale)
-    ctx.globalAlpha = opacity
+    ctx.globalAlpha = Math.max(0.05, opacity)
 
     ctx.clip(new Path2D(steps[i]))
 

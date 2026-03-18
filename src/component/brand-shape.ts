@@ -33,6 +33,8 @@ export class BrandShape extends LitElement {
     spread: { type: Number },
     noiseOpacity: { type: Number, attribute: 'noise-opacity' },
     blurRadius: { type: Number, attribute: 'blur-radius' },
+    scaleFrom: { type: Number, attribute: 'scale-from' },
+    scaleTo: { type: Number, attribute: 'scale-to' },
   }
 
   from: ShapeName = 'organic-1'
@@ -49,6 +51,8 @@ export class BrandShape extends LitElement {
   spread = 1
   noiseOpacity = 0.12
   blurRadius = 2
+  scaleFrom = 1.15
+  scaleTo = 0.95
 
   private _canvas: HTMLCanvasElement | null = null
   private _resizeObserver: ResizeObserver | null = null
@@ -92,6 +96,8 @@ export class BrandShape extends LitElement {
       },
       align: this.align,
       spread: this.spread,
+      scaleFrom: this.scaleFrom,
+      scaleTo: this.scaleTo,
     }
   }
 
