@@ -53,7 +53,25 @@ function buildRenderConfig(customSteps?: string[]): RenderConfig {
 }
 
 function renderStatic() {
-  render(canvas, buildRenderConfig())
+  // Use the same interpolator pipeline as animation so there's no visual
+  // difference between static and animated renders (prevents pop on transition)
+  const fromShape = getShape(config.from as any)
+  const toShape = getShape(config.to as any)
+  const interp = createMorphInterpolator(fromShape.path, toShape.path)
+  const totalSteps = config.steps
+
+  const paths: string[] = []
+  const indices: number[] = []
+  for (let i = 0; i < totalSteps; i++) {
+    const t = totalSteps === 1 ? 0 : i / (totalSteps - 1)
+    paths.push(interp(t))
+    indices.push(i)
+  }
+
+  const rc = buildRenderConfig(paths)
+  rc.stepIndices = indices
+  rc.totalStepCount = totalSteps
+  render(canvas, rc)
 }
 
 // --- Morph trail animation ---
@@ -125,8 +143,9 @@ function startAnimation() {
     if (progress < 1) {
       animId = requestAnimationFrame(tick)
     } else {
+      // Don't call renderStatic() — that uses a different pipeline
+      // which causes a visual pop. Just leave the final frame as-is.
       animId = null
-      renderStatic()
     }
   }
 
