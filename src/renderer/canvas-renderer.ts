@@ -127,29 +127,30 @@ export function render(canvas: HTMLCanvasElement, config: RenderConfig): void {
       renderWireframe(ctx, steps, colours, scaleFactor, translateX, translateY, width, height)
       break
     case 'filled':
-      renderFilled(ctx, steps, colours, config, scaleFactor, translateX, translateY, width, height)
+      renderFilled(ctx, steps, colours, config, scaleFactor, translateX, translateY, width, height, vb)
       break
     case 'gradient':
-      renderGradient(ctx, steps, colours, config, scaleFactor, translateX, translateY, width, height)
+      renderGradient(ctx, steps, colours, config, scaleFactor, translateX, translateY, width, height, vb)
       break
   }
 
   // Reset filter before noise overlay
   ctx.filter = 'none'
 
-  // Noise overlay
+  // Noise overlay — clipped to shape area only
   if (config.noise.enabled) {
     const noiseTexture = generateNoiseTexture(config.noise.size, config.noise.opacity)
-    ctx.globalCompositeOperation = 'overlay'
-    const tempCanvas = new OffscreenCanvas(config.noise.size, config.noise.size)
-    const tempCtx = tempCanvas.getContext('2d')!
-    tempCtx.putImageData(noiseTexture, 0, 0)
-    const pattern = ctx.createPattern(tempCanvas, 'repeat')
+    const noiseCanvas = new OffscreenCanvas(config.noise.size, config.noise.size)
+    const noiseCtx = noiseCanvas.getContext('2d')!
+    noiseCtx.putImageData(noiseTexture, 0, 0)
+    const pattern = ctx.createPattern(noiseCanvas, 'repeat')
     if (pattern) {
+      // source-atop: draws noise ONLY where shape pixels already exist
+      ctx.globalCompositeOperation = 'source-atop'
       ctx.fillStyle = pattern
       ctx.fillRect(0, 0, width, height)
+      ctx.globalCompositeOperation = 'source-over'
     }
-    ctx.globalCompositeOperation = 'source-over'
   }
 }
 
@@ -192,11 +193,13 @@ function renderFilled(
   scale: number,
   tx: number,
   ty: number,
-  width: number,
-  height: number,
+  _width: number,
+  _height: number,
+  vb: number[],
 ): void {
-  const centerX = width / 2
-  const centerY = height / 2
+  // Shape center in viewBox coordinates
+  const shapeCenterX = vb[2] / 2
+  const shapeCenterY = vb[3] / 2
 
   for (let i = 0; i < steps.length; i++) {
     const path = new Path2D(steps[i])
@@ -204,18 +207,20 @@ function renderFilled(
       i, steps.length, config.align, config.spread,
     )
 
-    // Conic gradient with per-step angle rotation
+    ctx.save()
+    ctx.translate(tx + offsetX, ty + offsetY)
+    ctx.scale(scale * stepScale, scale * stepScale)
+
+    // Create conic gradient in transformed (shape-local) space
+    // so the center tracks the shape, not the canvas
     const angleDeg = 90 + (i / steps.length) * 120
     const angleRad = (angleDeg * Math.PI) / 180
-    const conicGradient = ctx.createConicGradient(angleRad, centerX, centerY)
+    const conicGradient = ctx.createConicGradient(angleRad, shapeCenterX, shapeCenterY)
     conicGradient.addColorStop(0, colours.current)
     conicGradient.addColorStop(0.305, colours.future)
     conicGradient.addColorStop(0.472, colours.catalyst)
     conicGradient.addColorStop(1, colours.current)
 
-    ctx.save()
-    ctx.translate(tx + offsetX, ty + offsetY)
-    ctx.scale(scale * stepScale, scale * stepScale)
     ctx.fillStyle = conicGradient
     ctx.fill(path)
     ctx.restore()
@@ -230,11 +235,12 @@ function renderGradient(
   scale: number,
   tx: number,
   ty: number,
-  width: number,
-  height: number,
+  _width: number,
+  _height: number,
+  vb: number[],
 ): void {
-  const centerX = width / 2
-  const centerY = height / 2
+  const shapeCenterX = vb[2] / 2
+  const shapeCenterY = vb[3] / 2
 
   for (let i = 0; i < steps.length; i++) {
     const path = new Path2D(steps[i])
@@ -243,17 +249,18 @@ function renderGradient(
     )
     const opacity = 0.3 + (i / steps.length) * 0.7
 
+    ctx.save()
+    ctx.translate(tx + offsetX, ty + offsetY)
+    ctx.scale(scale * stepScale, scale * stepScale)
+
     const angleDeg = 90 + (i / steps.length) * 120
     const angleRad = (angleDeg * Math.PI) / 180
-    const conicGradient = ctx.createConicGradient(angleRad, centerX, centerY)
+    const conicGradient = ctx.createConicGradient(angleRad, shapeCenterX, shapeCenterY)
     conicGradient.addColorStop(0, colours.current)
     conicGradient.addColorStop(0.305, colours.future)
     conicGradient.addColorStop(0.472, colours.catalyst)
     conicGradient.addColorStop(1, colours.current)
 
-    ctx.save()
-    ctx.translate(tx + offsetX, ty + offsetY)
-    ctx.scale(scale * stepScale, scale * stepScale)
     ctx.globalAlpha = opacity
     ctx.fillStyle = conicGradient
     ctx.fill(path)
