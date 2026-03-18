@@ -215,10 +215,15 @@ function renderFilled(
     // so the center tracks the shape, not the canvas
     const angleDeg = 90 + (i / steps.length) * 120
     const angleRad = (angleDeg * Math.PI) / 180
+    // Narrative gradient: current(dark) → catalyst(bright, narrow) → future(light)
+    // Current dominates ~40%, catalyst is narrow ~10%, future ~40%, smooth wrap
     const conicGradient = ctx.createConicGradient(angleRad, shapeCenterX, shapeCenterY)
     conicGradient.addColorStop(0, colours.current)
-    conicGradient.addColorStop(0.305, colours.future)
-    conicGradient.addColorStop(0.472, colours.catalyst)
+    conicGradient.addColorStop(0.40, colours.current)
+    conicGradient.addColorStop(0.45, colours.catalyst)
+    conicGradient.addColorStop(0.55, colours.catalyst)
+    conicGradient.addColorStop(0.60, colours.future)
+    conicGradient.addColorStop(0.95, colours.future)
     conicGradient.addColorStop(1, colours.current)
 
     ctx.fillStyle = conicGradient
@@ -257,8 +262,11 @@ function renderGradient(
     const angleRad = (angleDeg * Math.PI) / 180
     const conicGradient = ctx.createConicGradient(angleRad, shapeCenterX, shapeCenterY)
     conicGradient.addColorStop(0, colours.current)
-    conicGradient.addColorStop(0.305, colours.future)
-    conicGradient.addColorStop(0.472, colours.catalyst)
+    conicGradient.addColorStop(0.40, colours.current)
+    conicGradient.addColorStop(0.45, colours.catalyst)
+    conicGradient.addColorStop(0.55, colours.catalyst)
+    conicGradient.addColorStop(0.60, colours.future)
+    conicGradient.addColorStop(0.95, colours.future)
     conicGradient.addColorStop(1, colours.current)
 
     ctx.globalAlpha = opacity
