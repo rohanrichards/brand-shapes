@@ -3,7 +3,7 @@ import { render, type RenderConfig } from '../renderer/canvas-renderer'
 import { shapeNames, getShape } from '../core/shapes'
 import { DEFAULT_NOISE_CONFIG } from '../core/effects'
 import { createMorphInterpolator, getMorphPoints, smoothPath, type Point } from '../core/morph'
-import { displacePoints, DEFAULT_VERTEX_ANIM, type VertexAnimConfig } from '../core/animate'
+import { displacePoints, DEFAULT_VERTEX_ANIM, type VertexAnimConfig, type CursorState, type PulseState } from '../core/animate'
 import { presets, presetNames } from './presets'
 
 const config = {
@@ -27,8 +27,9 @@ const config = {
   breathingAmplitude: DEFAULT_VERTEX_ANIM.breathingAmplitude,
   breathingSpeed: DEFAULT_VERTEX_ANIM.breathingSpeed,
   breathingFrequency: DEFAULT_VERTEX_ANIM.breathingFrequency,
+  cursorRepulsion: DEFAULT_VERTEX_ANIM.cursorRepulsion,
+  cursorRadius: DEFAULT_VERTEX_ANIM.cursorRadius,
   pulseAmplitude: DEFAULT_VERTEX_ANIM.pulseAmplitude,
-  pulseInterval: DEFAULT_VERTEX_ANIM.pulseInterval,
   pulseSharpness: DEFAULT_VERTEX_ANIM.pulseSharpness,
   pulseCascadeDelay: DEFAULT_VERTEX_ANIM.pulseCascadeDelay,
   preset: 'Organic Flow',
@@ -149,6 +150,45 @@ function startTrailAnimation() {
   tick(startTime)
 }
 
+// --- Cursor & pulse state ---
+
+let cursorState: CursorState | null = null
+let pulseState: PulseState | null = null
+let breatheStartTime = 0
+
+// Track cursor in shape-local coordinates
+// The renderer transforms: translate(tx, ty) then scale(scaleFactor)
+// So shape-local = (canvasPos - translate) / scaleFactor
+// We compute these from the same viewBox logic as the renderer
+function canvasToShapeCoords(canvasX: number, canvasY: number): CursorState {
+  const fromShape = getShape(config.from as any)
+  const vb = fromShape.viewBox.split(' ').map(Number)
+  const width = canvas.clientWidth
+  const height = canvas.clientHeight
+  const scaleX = width / vb[2]
+  const scaleY = height / vb[3]
+  const scaleFactor = Math.min(scaleX, scaleY) * 0.8
+  const tx = (width - vb[2] * scaleFactor) / 2
+  const ty = (height - vb[3] * scaleFactor) / 2
+  return {
+    x: (canvasX - tx) / scaleFactor,
+    y: (canvasY - ty) / scaleFactor,
+  }
+}
+
+canvas.addEventListener('mousemove', (e) => {
+  cursorState = canvasToShapeCoords(e.offsetX, e.offsetY)
+})
+
+canvas.addEventListener('mouseleave', () => {
+  cursorState = null
+})
+
+canvas.addEventListener('click', () => {
+  const time = (performance.now() - breatheStartTime) / 1000
+  pulseState = { triggerTime: time }
+})
+
 // --- Breathe animation (vertex displacement) ---
 
 function startBreatheAnimation() {
@@ -158,33 +198,35 @@ function startBreatheAnimation() {
   const toShape = getShape(config.to as any)
   const totalSteps = config.steps
 
-  // Pre-compute base points for each morph step
   const basePointSets: Point[][] = []
   for (let i = 0; i < totalSteps; i++) {
     const t = totalSteps === 1 ? 0 : i / (totalSteps - 1)
     basePointSets.push(getMorphPoints(fromShape.path, toShape.path, t))
   }
 
-  const startTime = performance.now()
+  breatheStartTime = performance.now()
+  pulseState = null
 
   function tick(now: number) {
-    const time = (now - startTime) / 1000 // seconds
+    const time = (now - breatheStartTime) / 1000
 
     const vertexConfig: VertexAnimConfig = {
       breathingAmplitude: config.breathingAmplitude,
       breathingSpeed: config.breathingSpeed,
       breathingFrequency: config.breathingFrequency,
+      cursorRepulsion: config.cursorRepulsion,
+      cursorRadius: config.cursorRadius,
       pulseAmplitude: config.pulseAmplitude,
-      pulseInterval: config.pulseInterval,
       pulseSharpness: config.pulseSharpness,
       pulseCascadeDelay: config.pulseCascadeDelay,
     }
 
-    // Displace each step's points — pulse cascades through layers via layerIndex
     const paths: string[] = []
     const indices: number[] = []
     for (let i = 0; i < totalSteps; i++) {
-      const displaced = displacePoints(basePointSets[i], time, vertexConfig, i)
+      const displaced = displacePoints(
+        basePointSets[i], time, vertexConfig, i, cursorState, pulseState,
+      )
       paths.push(smoothPath(displaced))
       indices.push(i)
     }
@@ -268,7 +310,8 @@ const breatheFolder = gui.addFolder('Breathe')
 breatheFolder.add(config, 'breathingAmplitude', 0, 5, 0.1).name('Breathing Amp')
 breatheFolder.add(config, 'breathingSpeed', 0.1, 2, 0.05).name('Breathing Speed')
 breatheFolder.add(config, 'breathingFrequency', 0.01, 0.3, 0.01).name('Breathing Freq')
-breatheFolder.add(config, 'pulseAmplitude', 0, 15, 0.5).name('Pulse Amp')
-breatheFolder.add(config, 'pulseInterval', 1, 10, 0.5).name('Pulse Interval')
+breatheFolder.add(config, 'cursorRepulsion', 0, 20, 0.5).name('Cursor Repulsion')
+breatheFolder.add(config, 'cursorRadius', 5, 80, 1).name('Cursor Radius')
+breatheFolder.add(config, 'pulseAmplitude', 0, 15, 0.5).name('Pulse Amp (click)')
 breatheFolder.add(config, 'pulseSharpness', 2, 30, 1).name('Pulse Sharpness')
 breatheFolder.add(config, 'pulseCascadeDelay', 0, 0.3, 0.01).name('Cascade Delay')

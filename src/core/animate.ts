@@ -1,26 +1,27 @@
 /*
  * BRAND SHAPES — Vertex Animation
  *
- * Two layers of movement:
+ * Three layers of movement:
  *   - Breathing: continuous noise-based organic wobble
- *   - Pulse: sharp radial heartbeat impulse that shivers down through layers
+ *   - Cursor repulsion: points near cursor push away from it
+ *   - Pulse: sharp radial heartbeat impulse triggered on click,
+ *     cascading down through layers
  */
 import { noise2d } from './noise'
 
 export interface VertexAnimConfig {
-  /** Breathing amplitude in shape units */
   breathingAmplitude: number
-  /** Breathing speed (lower = slower) */
   breathingSpeed: number
-  /** Breathing noise spatial frequency (lower = smoother) */
   breathingFrequency: number
-  /** Pulse radial amplitude (how far points push outward) */
+  /** Cursor repulsion strength */
+  cursorRepulsion: number
+  /** Cursor repulsion radius (in shape units) */
+  cursorRadius: number
+  /** Pulse radial amplitude */
   pulseAmplitude: number
-  /** Pulse interval in seconds (time between heartbeats) */
-  pulseInterval: number
-  /** Pulse attack sharpness — higher = snappier impulse */
+  /** Pulse attack sharpness — higher = snappier */
   pulseSharpness: number
-  /** Pulse cascade delay per layer (seconds between each layer's pulse) */
+  /** Pulse cascade delay per layer (seconds) */
   pulseCascadeDelay: number
 }
 
@@ -28,67 +29,63 @@ export const DEFAULT_VERTEX_ANIM: VertexAnimConfig = {
   breathingAmplitude: 1.5,
   breathingSpeed: 0.4,
   breathingFrequency: 0.08,
+  cursorRepulsion: 8.0,
+  cursorRadius: 30,
   pulseAmplitude: 4.0,
-  pulseInterval: 3.0,
   pulseSharpness: 12,
   pulseCascadeDelay: 0.08,
 }
 
-type Point = [number, number]
+export type Point = [number, number]
 
-/**
- * Compute the centroid of a set of points.
- */
+/** Cursor state in shape-local coordinates (null = cursor not over shape) */
+export interface CursorState {
+  x: number
+  y: number
+}
+
+/** Pulse state — triggered by click */
+export interface PulseState {
+  /** Time the pulse was triggered (seconds, same clock as animation time) */
+  triggerTime: number
+}
+
 function centroid(points: Point[]): Point {
   let cx = 0, cy = 0
-  for (const p of points) {
-    cx += p[0]
-    cy += p[1]
-  }
+  for (const p of points) { cx += p[0]; cy += p[1] }
   return [cx / points.length, cy / points.length]
 }
 
-/**
- * Sharp impulse envelope: quick attack, exponential decay.
- * Returns 0-1 where 1 is peak.
- *
- * @param phase - 0 to 1 within the pulse cycle
- * @param sharpness - higher = snappier attack and faster decay
- */
-function impulseEnvelope(phase: number, sharpness: number): number {
-  if (phase < 0 || phase >= 1) return 0
-  // Fast rise, exponential decay: t * e^(-sharpness * t)
-  // Normalized so peak ≈ 1
-  const t = phase
-  const peak = 1 / (sharpness * Math.E) // analytical max of t*e^(-s*t) at t=1/s
+function impulseEnvelope(elapsed: number, sharpness: number): number {
+  if (elapsed < 0) return 0
+  // Impulse decays over ~1 second regardless of sharpness
+  const t = elapsed
+  if (t > 2) return 0 // fully decayed
+  const peak = 1 / (sharpness * Math.E)
   const raw = t * Math.exp(-sharpness * t)
   return Math.min(raw / peak, 1)
 }
 
 /**
- * Displace points with breathing (continuous) and pulse (heartbeat).
- *
- * @param points - The uniformly-sampled shape points
- * @param time - Current time in seconds
- * @param config - Animation parameters
- * @param layerIndex - Which layer this is (0 = outermost/first)
- * @returns Displaced points
+ * Displace points with breathing, cursor repulsion, and click-triggered pulse.
  */
 export function displacePoints(
   points: Point[],
   time: number,
   config: VertexAnimConfig,
   layerIndex: number = 0,
+  cursor: CursorState | null = null,
+  pulse: PulseState | null = null,
 ): Point[] {
   const n = points.length
   const center = centroid(points)
 
-  // --- Pulse (heartbeat) ---
-  // Each layer pulses with a cascade delay
-  const layerTime = time - layerIndex * config.pulseCascadeDelay
-  const cycleTime = layerTime % config.pulseInterval
-  const pulsePhase = cycleTime / config.pulseInterval
-  const pulseStrength = impulseEnvelope(pulsePhase, config.pulseSharpness) * config.pulseAmplitude
+  // --- Pulse strength (from click trigger) ---
+  let pulseStrength = 0
+  if (pulse) {
+    const elapsed = time - pulse.triggerTime - layerIndex * config.pulseCascadeDelay
+    pulseStrength = impulseEnvelope(elapsed, config.pulseSharpness) * config.pulseAmplitude
+  }
 
   return points.map((p, i) => {
     const normalizedIndex = i / n
@@ -102,26 +99,35 @@ export function displacePoints(
       normalizedIndex * n * config.breathingFrequency + 100,
       time * config.breathingSpeed + 50,
     )
-    const breatheDx = noiseX * config.breathingAmplitude
-    const breatheDy = noiseY * config.breathingAmplitude
+    let dx = noiseX * config.breathingAmplitude
+    let dy = noiseY * config.breathingAmplitude
 
-    // --- Pulse: radial outward from centroid ---
-    let pulseDx = 0
-    let pulseDy = 0
-    if (pulseStrength > 0.01) {
-      const dx = p[0] - center[0]
-      const dy = p[1] - center[1]
-      const dist = Math.sqrt(dx * dx + dy * dy)
-      if (dist > 0.001) {
-        // Normalize direction, scale by pulse strength
-        pulseDx = (dx / dist) * pulseStrength
-        pulseDy = (dy / dist) * pulseStrength
+    // --- Cursor repulsion ---
+    if (cursor && config.cursorRepulsion > 0) {
+      const toCursorX = p[0] - cursor.x
+      const toCursorY = p[1] - cursor.y
+      const distToCursor = Math.sqrt(toCursorX * toCursorX + toCursorY * toCursorY)
+
+      if (distToCursor < config.cursorRadius && distToCursor > 0.001) {
+        // Smooth falloff: strongest at cursor, zero at radius edge
+        const falloff = 1 - (distToCursor / config.cursorRadius)
+        // Cubic falloff for smooth feel
+        const strength = falloff * falloff * falloff * config.cursorRepulsion
+        dx += (toCursorX / distToCursor) * strength
+        dy += (toCursorY / distToCursor) * strength
       }
     }
 
-    return [
-      p[0] + breatheDx + pulseDx,
-      p[1] + breatheDy + pulseDy,
-    ] as Point
+    // --- Pulse: radial outward from centroid ---
+    if (pulseStrength > 0.01) {
+      const toCenter = [p[0] - center[0], p[1] - center[1]]
+      const dist = Math.sqrt(toCenter[0] ** 2 + toCenter[1] ** 2)
+      if (dist > 0.001) {
+        dx += (toCenter[0] / dist) * pulseStrength
+        dy += (toCenter[1] / dist) * pulseStrength
+      }
+    }
+
+    return [p[0] + dx, p[1] + dy] as Point
   })
 }
