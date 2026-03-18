@@ -16,3 +16,6 @@ export {
   DEFAULT_BLUR_CONFIG,
 } from './core/effects'
 export type { ConicGradientConfig, GradientStop, NoiseConfig, BlurConfig } from './core/effects'
+
+export { render, DEFAULT_CONFIG } from './renderer/canvas-renderer'
+export type { RenderConfig, Variant, Alignment } from './renderer/canvas-renderer'
