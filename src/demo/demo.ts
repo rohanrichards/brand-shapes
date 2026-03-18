@@ -126,13 +126,8 @@ function startAnimation() {
     }
   }
 
-  // Show only the first shape immediately (no pop from full static render)
-  const rc = buildRenderConfig([interp(0)])
-  rc.stepIndices = [0]
-  rc.totalStepCount = totalSteps
-  render(canvas, rc)
-
-  animId = requestAnimationFrame(tick)
+  // Render first frame synchronously to avoid one-frame pop of static render
+  tick(startTime)
 }
 
 // --- Resize ---
