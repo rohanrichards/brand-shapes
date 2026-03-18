@@ -1,2 +1,2 @@
-// brand-shapes library entry
-// Modules will be re-exported as they are built
+export { shapes, getShape, shapeNames } from './core/shapes'
+export type { ShapeCategory, ShapeName, ShapeDefinition } from './core/shapes'
