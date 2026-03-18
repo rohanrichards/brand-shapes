@@ -80,36 +80,38 @@ function startAnimation() {
   const duration = config.duration
   const startTime = performance.now()
 
-  // Each step deposits at this interval
-  const depositInterval = duration / totalSteps
+  // Pre-compute the t value for each step
+  const stepTs: number[] = []
+  for (let i = 0; i < totalSteps; i++) {
+    stepTs.push(totalSteps === 1 ? 0 : i / (totalSteps - 1))
+  }
 
   function tick(now: number) {
     const elapsed = now - startTime
     const progress = Math.min(elapsed / duration, 1)
 
     // Ease: cubic ease-in-out
-    const eased = progress < 0.5
+    const leadT = progress < 0.5
       ? 4 * progress * progress * progress
       : 1 - Math.pow(-2 * progress + 2, 3) / 2
 
-    // How many steps have been deposited so far
-    const deposited = Math.min(Math.floor(elapsed / depositInterval), totalSteps)
-
-    // Build the frozen snapshots at their final t values
+    // Deposit steps that the lead has passed — a step deposits
+    // the instant the lead reaches or passes its t position
     const paths: string[] = []
     const indices: number[] = []
-    for (let i = 0; i < deposited; i++) {
-      const stepT = totalSteps === 1 ? 0 : i / (totalSteps - 1)
-      paths.push(interp(stepT))
-      indices.push(i)
+    for (let i = 0; i < totalSteps; i++) {
+      if (leadT >= stepTs[i]) {
+        paths.push(interp(stepTs[i]))
+        indices.push(i)
+      }
     }
 
-    // Add the lead shape at the current animated position.
-    // Its transform index = where it currently is in the morph sequence.
-    const leadT = eased
-    paths.push(interp(leadT))
-    // Lead's index: proportional position in the step sequence
-    indices.push(leadT * (totalSteps - 1))
+    // Add the lead shape at its current position (ahead of or at last deposit)
+    const lastDepositedT = paths.length > 0 ? stepTs[paths.length - 1] : 0
+    if (leadT > lastDepositedT && progress < 1) {
+      paths.push(interp(leadT))
+      indices.push(leadT * (totalSteps - 1))
+    }
 
     const rc = buildRenderConfig(paths)
     rc.stepIndices = indices
@@ -119,11 +121,16 @@ function startAnimation() {
     if (progress < 1) {
       animId = requestAnimationFrame(tick)
     } else {
-      // Animation complete — render the final static state
       animId = null
       renderStatic()
     }
   }
+
+  // Show only the first shape immediately (no pop from full static render)
+  const rc = buildRenderConfig([interp(0)])
+  rc.stepIndices = [0]
+  rc.totalStepCount = totalSteps
+  render(canvas, rc)
 
   animId = requestAnimationFrame(tick)
 }
