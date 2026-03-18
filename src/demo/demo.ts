@@ -257,15 +257,6 @@ function startBreatheAnimation() {
     rc.stepIndices = indices
     rc.totalStepCount = totalSteps
 
-    // Shift gradient center toward cursor
-    if (cursorState) {
-      const vb2 = getShape(config.from as any).viewBox.split(' ').map(Number)
-      rc.gradientCenterOffset = {
-        x: (cursorState.x - vb2[2] / 2) * config.cursorParallax * 2,
-        y: (cursorState.y - vb2[3] / 2) * config.cursorParallax * 2,
-      }
-    }
-
     render(canvas, rc)
 
     animId = requestAnimationFrame(tick)

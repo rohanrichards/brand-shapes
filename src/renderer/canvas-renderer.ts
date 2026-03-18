@@ -47,8 +47,6 @@ export interface RenderConfig {
   stepIndices?: number[]
   /** Total step count for transform calculations (used with stepIndices). */
   totalStepCount?: number
-  /** Offset the conic gradient center (in shape-local units). */
-  gradientCenterOffset?: { x: number; y: number }
 }
 
 export const DEFAULT_CONFIG: RenderConfig = {
@@ -231,9 +229,8 @@ function renderFilled(
 ): void {
   // Figma pattern: each step gets its OWN conic gradient, clipped to its shape.
   // The gradient fills the entire shape independently per step.
-  const gOff = config.gradientCenterOffset || { x: 0, y: 0 }
-  const shapeCenterX = vb[2] / 2 + gOff.x
-  const shapeCenterY = vb[3] / 2 + gOff.y
+  const shapeCenterX = vb[2] / 2
+  const shapeCenterY = vb[3] / 2
 
   for (let i = 0; i < steps.length; i++) {
     const stepIdx = config.stepIndices ? config.stepIndices[i] : i
@@ -292,9 +289,8 @@ function renderGradient(
   _height: number,
   vb: number[],
 ): void {
-  const gOff = config.gradientCenterOffset || { x: 0, y: 0 }
-  const shapeCenterX = vb[2] / 2 + gOff.x
-  const shapeCenterY = vb[3] / 2 + gOff.y
+  const shapeCenterX = vb[2] / 2
+  const shapeCenterY = vb[3] / 2
 
   for (let i = 0; i < steps.length; i++) {
     const stepIdx = config.stepIndices ? config.stepIndices[i] : i
