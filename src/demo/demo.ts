@@ -109,7 +109,7 @@ function startAnimation() {
   }
 
   function tick(now: number) {
-    const elapsed = now - startTime
+    const elapsed = Math.max(0, now - startTime)
     const progress = Math.min(elapsed / duration, 1)
 
     // Ease: cubic ease-in-out
