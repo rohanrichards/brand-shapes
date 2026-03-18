@@ -197,27 +197,21 @@ function renderFilled(
   _height: number,
   vb: number[],
 ): void {
-  // Shape center in viewBox coordinates
-  const shapeCenterX = vb[2] / 2
-  const shapeCenterY = vb[3] / 2
-
   for (let i = 0; i < steps.length; i++) {
     const path = new Path2D(steps[i])
     const { scale: stepScale, offsetX, offsetY } = computeStepTransform(
       i, steps.length, config.align, config.spread,
     )
 
-    ctx.save()
-    ctx.translate(tx + offsetX, ty + offsetY)
-    ctx.scale(scale * stepScale, scale * stepScale)
+    // Compute shape center in canvas space (before transform)
+    const totalScale = scale * stepScale
+    const centerCanvasX = (tx + offsetX) + (vb[2] / 2) * totalScale
+    const centerCanvasY = (ty + offsetY) + (vb[3] / 2) * totalScale
 
-    // Create conic gradient in transformed (shape-local) space
-    // so the center tracks the shape, not the canvas
+    // Create gradient in canvas space so it doesn't get distorted by scale
     const angleDeg = 90 + (i / steps.length) * 120
     const angleRad = (angleDeg * Math.PI) / 180
-    // Narrative gradient: current(dark) → catalyst(bright, narrow) → future(light)
-    // Current dominates ~40%, catalyst is narrow ~10%, future ~40%, smooth wrap
-    const conicGradient = ctx.createConicGradient(angleRad, shapeCenterX, shapeCenterY)
+    const conicGradient = ctx.createConicGradient(angleRad, centerCanvasX, centerCanvasY)
     conicGradient.addColorStop(0, colours.current)
     conicGradient.addColorStop(0.40, colours.current)
     conicGradient.addColorStop(0.45, colours.catalyst)
@@ -226,6 +220,9 @@ function renderFilled(
     conicGradient.addColorStop(0.95, colours.future)
     conicGradient.addColorStop(1, colours.current)
 
+    ctx.save()
+    ctx.translate(tx + offsetX, ty + offsetY)
+    ctx.scale(totalScale, totalScale)
     ctx.fillStyle = conicGradient
     ctx.fill(path)
     ctx.restore()
@@ -244,9 +241,6 @@ function renderGradient(
   _height: number,
   vb: number[],
 ): void {
-  const shapeCenterX = vb[2] / 2
-  const shapeCenterY = vb[3] / 2
-
   for (let i = 0; i < steps.length; i++) {
     const path = new Path2D(steps[i])
     const { scale: stepScale, offsetX, offsetY } = computeStepTransform(
@@ -254,13 +248,13 @@ function renderGradient(
     )
     const opacity = 0.3 + (i / steps.length) * 0.7
 
-    ctx.save()
-    ctx.translate(tx + offsetX, ty + offsetY)
-    ctx.scale(scale * stepScale, scale * stepScale)
+    const totalScale = scale * stepScale
+    const centerCanvasX = (tx + offsetX) + (vb[2] / 2) * totalScale
+    const centerCanvasY = (ty + offsetY) + (vb[3] / 2) * totalScale
 
     const angleDeg = 90 + (i / steps.length) * 120
     const angleRad = (angleDeg * Math.PI) / 180
-    const conicGradient = ctx.createConicGradient(angleRad, shapeCenterX, shapeCenterY)
+    const conicGradient = ctx.createConicGradient(angleRad, centerCanvasX, centerCanvasY)
     conicGradient.addColorStop(0, colours.current)
     conicGradient.addColorStop(0.40, colours.current)
     conicGradient.addColorStop(0.45, colours.catalyst)
@@ -269,6 +263,9 @@ function renderGradient(
     conicGradient.addColorStop(0.95, colours.future)
     conicGradient.addColorStop(1, colours.current)
 
+    ctx.save()
+    ctx.translate(tx + offsetX, ty + offsetY)
+    ctx.scale(totalScale, totalScale)
     ctx.globalAlpha = opacity
     ctx.fillStyle = conicGradient
     ctx.fill(path)
