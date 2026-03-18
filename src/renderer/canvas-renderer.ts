@@ -38,6 +38,15 @@ export interface RenderConfig {
   visibleSteps?: number
   /** Override the generated morph steps with custom path strings (for animation). */
   customSteps?: string[]
+  /**
+   * Per-step transform indices for customSteps.
+   * Maps each customStep to its position in the final layout (0-based index
+   * out of totalStepCount). Without this, transforms are computed from
+   * array index / array length, which causes jitter when the array grows.
+   */
+  stepIndices?: number[]
+  /** Total step count for transform calculations (used with stepIndices). */
+  totalStepCount?: number
 }
 
 export const DEFAULT_CONFIG: RenderConfig = {
@@ -224,14 +233,16 @@ function renderFilled(
   const shapeCenterY = vb[3] / 2
 
   for (let i = 0; i < steps.length; i++) {
+    const stepIdx = config.stepIndices ? config.stepIndices[i] : i
+    const stepTotal = config.totalStepCount || steps.length
     const { scale: stepScale, offsetX, offsetY } = computeStepTransform(
-      i, steps.length, config.align, config.spread, config.scaleFrom, config.scaleTo,
+      stepIdx, stepTotal, config.align, config.spread, config.scaleFrom, config.scaleTo,
     )
     const totalScale = scale * stepScale
 
     // Per-step angle rotation (Figma uses a full 2D transform matrix per step;
     // we approximate with angle rotation)
-    const angleDeg = 90 + (i / steps.length) * 120
+    const angleDeg = 90 + (stepIdx / stepTotal) * 120
     const angleRad = (angleDeg * Math.PI) / 180
 
     ctx.save()
@@ -282,8 +293,10 @@ function renderGradient(
   const shapeCenterY = vb[3] / 2
 
   for (let i = 0; i < steps.length; i++) {
+    const stepIdx = config.stepIndices ? config.stepIndices[i] : i
+    const stepTotal = config.totalStepCount || steps.length
     const { scale: stepScale, offsetX, offsetY } = computeStepTransform(
-      i, steps.length, config.align, config.spread, config.scaleFrom, config.scaleTo,
+      stepIdx, stepTotal, config.align, config.spread, config.scaleFrom, config.scaleTo,
     )
     // More dramatic opacity ramp than filled — back layers nearly transparent,
     // front layers fully opaque, creating a glowing depth-of-field effect
@@ -291,7 +304,7 @@ function renderGradient(
     const opacity = t * t // quadratic: 0, 0.01, 0.04, ... 0.64, 1.0
     const totalScale = scale * stepScale
 
-    const angleDeg = 90 + (i / steps.length) * 120
+    const angleDeg = 90 + (stepIdx / stepTotal) * 120
     const angleRad = (angleDeg * Math.PI) / 180
 
     ctx.save()

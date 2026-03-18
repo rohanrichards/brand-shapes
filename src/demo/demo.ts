@@ -96,18 +96,25 @@ function startAnimation() {
     const deposited = Math.min(Math.floor(elapsed / depositInterval), totalSteps)
 
     // Build the frozen snapshots at their final t values
-    const frozenSteps: string[] = []
+    const paths: string[] = []
+    const indices: number[] = []
     for (let i = 0; i < deposited; i++) {
       const stepT = totalSteps === 1 ? 0 : i / (totalSteps - 1)
-      frozenSteps.push(interp(stepT))
+      paths.push(interp(stepT))
+      indices.push(i)
     }
 
-    // Add the lead shape at the current animated position
-    // The lead is ahead of the last deposited step
+    // Add the lead shape at the current animated position.
+    // Its transform index = where it currently is in the morph sequence.
     const leadT = eased
-    frozenSteps.push(interp(leadT))
+    paths.push(interp(leadT))
+    // Lead's index: proportional position in the step sequence
+    indices.push(leadT * (totalSteps - 1))
 
-    render(canvas, buildRenderConfig(frozenSteps))
+    const rc = buildRenderConfig(paths)
+    rc.stepIndices = indices
+    rc.totalStepCount = totalSteps
+    render(canvas, rc)
 
     if (progress < 1) {
       animId = requestAnimationFrame(tick)
