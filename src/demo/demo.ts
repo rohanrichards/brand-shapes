@@ -31,6 +31,7 @@ const config = {
   bolusSpeed: DEFAULT_VERTEX_ANIM.bolusSpeed,
   bolusWidth: DEFAULT_VERTEX_ANIM.bolusWidth,
   bolusInterval: DEFAULT_VERTEX_ANIM.bolusInterval,
+  bolusPause: DEFAULT_VERTEX_ANIM.bolusPause,
   preset: 'Organic Flow',
 }
 
@@ -178,6 +179,7 @@ function startBreatheAnimation() {
       bolusSpeed: config.bolusSpeed,
       bolusWidth: config.bolusWidth,
       bolusInterval: config.bolusInterval,
+      bolusPause: config.bolusPause,
     }
 
     // Displace each step's points independently with time offsets per layer
@@ -274,3 +276,4 @@ breatheFolder.add(config, 'bolusAmplitude', 0, 10, 0.5).name('Pulse Amp')
 breatheFolder.add(config, 'bolusSpeed', 0.1, 3, 0.1).name('Pulse Speed')
 breatheFolder.add(config, 'bolusWidth', 0.05, 0.5, 0.01).name('Pulse Width')
 breatheFolder.add(config, 'bolusInterval', 1, 10, 0.5).name('Pulse Interval')
+breatheFolder.add(config, 'bolusPause', 0, 0.9, 0.05).name('Pulse Pause')

@@ -24,6 +24,8 @@ export interface VertexAnimConfig {
   bolusWidth: number
   /** Bolus repeat interval in seconds */
   bolusInterval: number
+  /** Fraction of interval that is rest (0-0.9). Pulse plays during the active portion. */
+  bolusPause: number
 }
 
 export const DEFAULT_VERTEX_ANIM: VertexAnimConfig = {
@@ -34,6 +36,7 @@ export const DEFAULT_VERTEX_ANIM: VertexAnimConfig = {
   bolusSpeed: 1.2,
   bolusWidth: 0.15,
   bolusInterval: 3.0,
+  bolusPause: 0.5,
 }
 
 type Point = [number, number]
@@ -53,9 +56,14 @@ export function displacePoints(
 ): Point[] {
   const n = points.length
 
-  // Bolus: a pulse that propagates around the shape perimeter
-  const bolusPhase = (time * config.bolusSpeed / config.bolusInterval) % 1
-  const bolusCenter = bolusPhase // 0-1 position along the shape
+  // Bolus: a pulse that propagates, then pauses.
+  // cyclePhase goes 0→1 over the full interval.
+  // Active portion: 0 to (1 - pause). Rest portion: (1 - pause) to 1.
+  const cyclePhase = ((time % config.bolusInterval) / config.bolusInterval)
+  const activeFraction = 1 - config.bolusPause
+  const bolusActive = cyclePhase < activeFraction
+  // During active phase, remap to 0→1 for propagation position
+  const bolusCenter = bolusActive ? cyclePhase / activeFraction : 0
 
   return points.map((p, i) => {
     const normalizedIndex = i / n // 0-1 position along shape
@@ -78,8 +86,10 @@ export function displacePoints(
     let dist = Math.abs(normalizedIndex - bolusCenter)
     if (dist > 0.5) dist = 1 - dist // wrap around
 
-    // Gaussian-ish pulse shape
-    const bolusStrength = Math.exp(-(dist * dist) / (2 * config.bolusWidth * config.bolusWidth))
+    // Gaussian-ish pulse shape — zero during pause
+    const bolusStrength = bolusActive
+      ? Math.exp(-(dist * dist) / (2 * config.bolusWidth * config.bolusWidth))
+      : 0
 
     // Bolus displaces radially outward from shape center
     // Compute approximate center of all points
