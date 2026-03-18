@@ -124,7 +124,7 @@ export function generateMorphSteps(
   stepCount: number,
 ): MorphResult {
   const clamped = Math.min(MAX_STEPS, Math.max(MIN_STEPS, stepCount))
-  const cacheKey = `${fromPath.length}:${toPath.length}:${clamped}`
+  const cacheKey = `${fromPath}|${toPath}|${clamped}`
 
   if (_cache && _cache.key === cacheKey) {
     return { steps: _cache.steps }
