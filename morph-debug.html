@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Morph Debug — Isolated Steps</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #0a0a0a; padding: 20px; font-family: system-ui; color: #fff; }
+    h3 { font-size: 13px; opacity: 0.6; margin: 16px 0 8px; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; }
+    canvas { border: 1px solid rgba(255,255,255,0.15); border-radius: 4px; }
+    .label { font-size: 10px; opacity: 0.4; text-align: center; margin-top: 2px; }
+  </style>
+</head>
+<body>
+  <h3 id="title">Loading...</h3>
+  <div class="row" id="steps"></div>
+
+  <script type="module">
+    import { generateMorphSteps } from './src/core/morph.ts'
+    import { shapes, shapeNames } from './src/core/shapes.ts'
+
+    // URL params: ?from=organic-1&to=angular-3&steps=10
+    const params = new URLSearchParams(location.search)
+    const fromName = params.get('from') || 'organic-1'
+    const toName = params.get('to') || 'angular-3'
+    const stepCount = parseInt(params.get('steps') || '10')
+
+    document.getElementById('title').textContent =
+      `${fromName} → ${toName} (${stepCount} steps, maxSegmentLength=0.5)`
+
+    const fromShape = shapes[fromName]
+    const toShape = shapes[toName]
+
+    if (!fromShape || !toShape) {
+      document.getElementById('title').textContent = 'Invalid shape names. Available: ' + shapeNames.join(', ')
+    } else {
+      const { steps } = generateMorphSteps(fromShape.path, toShape.path, stepCount)
+      const container = document.getElementById('steps')
+
+      // Use the larger viewBox to fit both shapes
+      const vbFrom = fromShape.viewBox.split(' ').map(Number)
+      const vbTo = toShape.viewBox.split(' ').map(Number)
+      const vbW = Math.max(vbFrom[2], vbTo[2])
+      const vbH = Math.max(vbFrom[3], vbTo[3])
+
+      steps.forEach((pathStr, i) => {
+        const wrapper = document.createElement('div')
+        const canvas = document.createElement('canvas')
+        const size = 200
+        canvas.width = size * 2  // 2x for retina
+        canvas.height = size * 2
+        canvas.style.width = size + 'px'
+        canvas.style.height = size + 'px'
+        const ctx = canvas.getContext('2d')
+        ctx.scale(2, 2)
+
+        // Scale to fit
+        const s = Math.min(size / vbW, size / vbH) * 0.85
+        const tx = (size - vbW * s) / 2
+        const ty = (size - vbH * s) / 2
+
+        ctx.translate(tx, ty)
+        ctx.scale(s, s)
+
+        // Fill
+        ctx.fillStyle = '#FF38C0'
+        ctx.fill(new Path2D(pathStr))
+
+        // Stroke outline
+        ctx.strokeStyle = 'rgba(255,255,255,0.5)'
+        ctx.lineWidth = 0.5 / s
+        ctx.stroke(new Path2D(pathStr))
+
+        const label = document.createElement('div')
+        label.className = 'label'
+        const t = stepCount <= 1 ? 0 : i / (stepCount - 1)
+        label.textContent = `t=${t.toFixed(2)}`
+
+        wrapper.appendChild(canvas)
+        wrapper.appendChild(label)
+        container.appendChild(wrapper)
+      })
+    }
+  </script>
+</body>
+</html>
