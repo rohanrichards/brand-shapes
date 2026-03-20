@@ -21,7 +21,7 @@ function pathCentroid(pathStr: string): [number, number] {
   }
   return [sx / count, sy / count]
 }
-import { type ColourFamily, resolveScheme, resolveGradientColours } from '../core/colours'
+import type { GradientColours } from '../core/colours'
 import { generateMorphSteps } from '../core/morph'
 import {
   generateStepFills,
@@ -39,7 +39,8 @@ export interface RenderConfig {
   from: ShapeName
   to: ShapeName
   steps: number
-  scheme: ColourFamily
+  colours: GradientColours
+  background?: string
   variant: Variant
   noise: NoiseConfig
   blur: BlurConfig
@@ -66,7 +67,7 @@ export const DEFAULT_CONFIG: RenderConfig = {
   from: 'organic-1',
   to: 'angular-3',
   steps: 8,
-  scheme: 'lime',
+  colours: { current: '#4B01E6', catalyst: '#BEF958', future: '#FEA6E1' },
   variant: 'filled',
   noise: { ...DEFAULT_NOISE_CONFIG },
   blur: { ...DEFAULT_BLUR_CONFIG },
@@ -134,6 +135,11 @@ export function render(canvas: HTMLCanvasElement, config: RenderConfig): void {
 
   ctx.clearRect(0, 0, width, height)
 
+  if (config.background && config.background !== 'transparent') {
+    ctx.fillStyle = config.background
+    ctx.fillRect(0, 0, width, height)
+  }
+
   const fromShape = getShape(config.from)
   const toShape = getShape(config.to)
   let steps: string[]
@@ -144,8 +150,7 @@ export function render(canvas: HTMLCanvasElement, config: RenderConfig): void {
     const visCount = config.visibleSteps != null ? Math.min(config.visibleSteps, allSteps.length) : allSteps.length
     steps = allSteps.slice(0, visCount)
   }
-  const colours = resolveScheme(config.scheme)
-  const gradientColours = resolveGradientColours(config.scheme)
+  const colours = config.colours
 
   // Parse viewBox for coordinate mapping (use from shape's viewBox)
   const vb = fromShape.viewBox.split(' ').map(Number)
@@ -166,10 +171,10 @@ export function render(canvas: HTMLCanvasElement, config: RenderConfig): void {
       renderWireframe(offCtx, steps, colours, scaleFactor, translateX, translateY, width, height)
       break
     case 'filled':
-      renderFilled(offCtx, steps, gradientColours, config, scaleFactor, translateX, translateY, width, height, vb)
+      renderFilled(offCtx, steps, colours, config, scaleFactor, translateX, translateY, width, height, vb)
       break
     case 'gradient':
-      renderGradient(offCtx, steps, gradientColours, config, scaleFactor, translateX, translateY, width, height, vb)
+      renderGradient(offCtx, steps, colours, config, scaleFactor, translateX, translateY, width, height, vb)
       break
   }
 
