@@ -5,12 +5,16 @@ import { DEFAULT_NOISE_CONFIG } from '../core/effects'
 import { createMorphInterpolator, getMorphPoints, smoothPath, type Point } from '../core/morph'
 import { displacePoints, DEFAULT_VERTEX_ANIM, type VertexAnimConfig, type PulseState } from '../core/animate'
 import { presets, presetNames } from './presets'
+import { allColourHexes } from '../core/colours'
 
 const config = {
   from: 'organic-1',
   to: 'angular-3',
   steps: 8,
-  scheme: 'blue',
+  colourFrom: '#4B01E6',
+  colourCatalyst: '#BEF958',
+  colourTo: '#FEA6E1',
+  background: '#000000',
   variant: 'filled' as 'wireframe' | 'filled' | 'gradient',
   noise: true,
   blur: false,
@@ -44,7 +48,12 @@ function buildRenderConfig(customSteps?: string[]): RenderConfig {
     from: config.from as any,
     to: config.to as any,
     steps: config.steps,
-    scheme: config.scheme as any,
+    colours: {
+      current: config.colourFrom,
+      catalyst: config.colourCatalyst,
+      future: config.colourTo,
+    },
+    background: config.background,
     variant: config.variant,
     noise: {
       enabled: config.noise,
@@ -303,13 +312,38 @@ gui.add(config, 'preset', presetNames).name('Preset').onChange((name: string) =>
   onConfigChange()
 })
 
+const backgroundOptions = ['transparent', '#000000', '#FFFFFF', ...allColourHexes]
+
+function randomize() {
+  const pick = <T>(arr: readonly T[]): T => arr[Math.floor(Math.random() * arr.length)]
+  config.from = pick(shapeNames) as any
+  config.to = pick(shapeNames) as any
+  config.steps = Math.floor(Math.random() * 11) + 5
+  config.colourFrom = pick(allColourHexes)
+  config.colourCatalyst = pick(allColourHexes)
+  config.colourTo = pick(allColourHexes)
+  config.variant = pick(['wireframe', 'filled', 'gradient'] as const)
+  config.align = pick(['left', 'right', 'top', 'bottom', 'center'] as const)
+  config.spread = Math.round((Math.random() * 9.5 + 0.5) * 10) / 10
+  config.scaleFrom = Math.round((Math.random() * 1.5 + 0.5) * 100) / 100
+  config.scaleTo = Math.round((Math.random() * 1.5 + 0.5) * 100) / 100
+  config.background = pick(backgroundOptions)
+  gui.controllersRecursive().forEach(c => c.updateDisplay())
+  onConfigChange()
+}
+
+gui.add({ randomize }, 'randomize').name('Randomize')
+
 const shapeFolder = gui.addFolder('Shape')
 shapeFolder.add(config, 'from', shapeNames).name('From').onChange(onConfigChange)
 shapeFolder.add(config, 'to', shapeNames).name('To').onChange(onConfigChange)
 shapeFolder.add(config, 'steps', 5, 15, 1).name('Steps').onChange(onConfigChange)
 
 const colourFolder = gui.addFolder('Colour')
-colourFolder.add(config, 'scheme', ['lime', 'pink', 'blue', 'vermillion', 'brown']).name('Scheme').onChange(onConfigChange)
+colourFolder.add(config, 'colourFrom', allColourHexes).name('From').onChange(onConfigChange)
+colourFolder.add(config, 'colourCatalyst', allColourHexes).name('Catalyst').onChange(onConfigChange)
+colourFolder.add(config, 'colourTo', allColourHexes).name('To').onChange(onConfigChange)
+colourFolder.add(config, 'background', backgroundOptions).name('Background').onChange(onConfigChange)
 
 const effectsFolder = gui.addFolder('Effects')
 effectsFolder.add(config, 'variant', ['wireframe', 'filled', 'gradient']).name('Variant').onChange(onConfigChange)
@@ -338,3 +372,42 @@ breatheFolder.add(config, 'pulseAmplitude', 0, 15, 0.5).name('Pulse Amp')
 breatheFolder.add(config, 'pulseInterval', 1, 10, 0.5).name('Pulse Interval')
 breatheFolder.add(config, 'pulseSharpness', 2, 30, 1).name('Pulse Sharpness')
 breatheFolder.add(config, 'pulseCascadeDelay', 0, 0.3, 0.01).name('Cascade Delay')
+
+const exportConfig = {
+  transparentBg: false,
+}
+
+function exportPNG() {
+  if (exportConfig.transparentBg) {
+    const savedBg = config.background
+    config.background = 'transparent'
+    startCurrentMode()
+    requestAnimationFrame(() => {
+      canvas.toBlob((blob) => {
+        if (!blob) return
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = 'brand-shape.png'
+        a.click()
+        URL.revokeObjectURL(url)
+        config.background = savedBg
+        startCurrentMode()
+      }, 'image/png')
+    })
+  } else {
+    canvas.toBlob((blob) => {
+      if (!blob) return
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'brand-shape.png'
+      a.click()
+      URL.revokeObjectURL(url)
+    }, 'image/png')
+  }
+}
+
+const exportFolder = gui.addFolder('Export')
+exportFolder.add(exportConfig, 'transparentBg').name('Transparent BG')
+exportFolder.add({ exportPNG }, 'exportPNG').name('Export PNG')
