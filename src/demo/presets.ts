@@ -21,54 +21,75 @@ export interface PresetConfig {
 }
 
 export const presets: Record<string, PresetConfig> = {
-  'Organic Flow': {
+  // --- Gradient combos from Figma colour examples ---
+  'Blue Lime Rose': {
     from: 'organic-1', to: 'organic-3', steps: 10,
     colourFrom: '#4B01E6', colourCatalyst: '#BEF958', colourTo: '#FEA6E1',
     variant: 'filled',
     noise: true, blur: false,
     align: 'right', spread: 1.2,
     noiseOpacity: 0.08, blurRadius: 2, scaleFrom: 1.15, scaleTo: 0.95,
-    background: '#000000',
+    background: '#EDFFCC',
   },
-  'Angular Edge': {
+  'Vermillion Ember': {
     from: 'angular-1', to: 'angular-4', steps: 12,
     colourFrom: '#EE4811', colourCatalyst: '#341405', colourTo: '#FF38C0',
     variant: 'filled',
     noise: false, blur: false,
     align: 'left', spread: 1.5,
     noiseOpacity: 0.12, blurRadius: 2, scaleFrom: 1.15, scaleTo: 0.95,
-    background: '#000000',
+    background: '#FFC3F6',
   },
-  'Chromatic Burst': {
+  'Lime Rose Earth': {
     from: 'primitive-2', to: 'organic-4', steps: 8,
     colourFrom: '#BEF958', colourCatalyst: '#FEA6E1', colourTo: '#81330C',
     variant: 'filled',
     noise: true, blur: true,
     align: 'center', spread: 1.0,
     noiseOpacity: 0.10, blurRadius: 3, scaleFrom: 1.2, scaleTo: 0.85,
-    background: '#000000',
+    background: '#4B01E6',
   },
-  'Vermillion Heat': {
+  'Lime Pink Blue': {
     from: 'organic-2', to: 'angular-2', steps: 10,
     colourFrom: '#BEF958', colourCatalyst: '#FFC3F6', colourTo: '#4B01E6',
     variant: 'gradient',
     noise: true, blur: false,
     align: 'bottom', spread: 1.3,
     noiseOpacity: 0.12, blurRadius: 2, scaleFrom: 1.15, scaleTo: 0.95,
-    background: '#000000',
+    background: '#BEF958',
   },
-  'Earth Tone': {
+  'Vermillion Pink Alt-Lime': {
     from: 'primitive-1', to: 'primitive-4', steps: 8,
     colourFrom: '#EE4811', colourCatalyst: '#FFC3F6', colourTo: '#C2F462',
     variant: 'filled',
     noise: true, blur: false,
     align: 'right', spread: 1.8,
     noiseOpacity: 0.15, blurRadius: 2, scaleFrom: 1.3, scaleTo: 0.8,
-    background: '#000000',
+    background: '#EE4811',
   },
-  'Wireframe Study': {
-    from: 'organic-1', to: 'angular-3', steps: 12,
+  'Brown Pink Blue': {
+    from: 'organic-1', to: 'angular-3', steps: 10,
     colourFrom: '#81330C', colourCatalyst: '#FFC3F6', colourTo: '#4B01E6',
+    variant: 'filled',
+    noise: false, blur: false,
+    align: 'right', spread: 1.2,
+    noiseOpacity: 0.08, blurRadius: 2, scaleFrom: 1.15, scaleTo: 0.95,
+    background: '#FFC6BF',
+  },
+  // --- Solid fill combos from Figma shape examples ---
+  'Soft Layers': {
+    from: 'organic-3', to: 'organic-1', steps: 8,
+    colourFrom: '#EDFFCC', colourCatalyst: '#EE4811', colourTo: '#FFC3F6',
+    variant: 'filled',
+    noise: false, blur: false,
+    align: 'center', spread: 1.0,
+    noiseOpacity: 0.08, blurRadius: 2, scaleFrom: 1.15, scaleTo: 0.95,
+    background: '#EDFFCC',
+  },
+  // --- Wireframe on dark ---
+  'Wireframe Dark': {
+    from: 'organic-1', to: 'angular-3', steps: 12,
+    colourFrom: '#BEF958', colourCatalyst: '#FFC3F6', colourTo: '#4B01E6',
     variant: 'wireframe',
     noise: false, blur: false,
     align: 'center', spread: 1.0,

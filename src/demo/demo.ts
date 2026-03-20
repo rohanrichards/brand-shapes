@@ -5,7 +5,7 @@ import { DEFAULT_NOISE_CONFIG } from '../core/effects'
 import { createMorphInterpolator, getMorphPoints, smoothPath, type Point } from '../core/morph'
 import { displacePoints, DEFAULT_VERTEX_ANIM, type VertexAnimConfig, type PulseState } from '../core/animate'
 import { presets, presetNames } from './presets'
-import { allColourHexes } from '../core/colours'
+import { allColourHexes, allColourOptions } from '../core/colours'
 
 const config = {
   from: 'organic-1',
@@ -312,22 +312,27 @@ gui.add(config, 'preset', presetNames).name('Preset').onChange((name: string) =>
   onConfigChange()
 })
 
-const backgroundOptions = ['transparent', '#000000', '#FFFFFF', ...allColourHexes]
+const backgroundOptions: Record<string, string> = {
+  'transparent': 'transparent',
+  'black (#000000)': '#000000',
+  'white (#FFFFFF)': '#FFFFFF',
+  ...allColourOptions,
+}
 
 function randomize() {
   const pick = <T>(arr: readonly T[]): T => arr[Math.floor(Math.random() * arr.length)]
   config.from = pick(shapeNames) as any
   config.to = pick(shapeNames) as any
   config.steps = Math.floor(Math.random() * 11) + 5
-  config.colourFrom = pick(allColourHexes)
-  config.colourCatalyst = pick(allColourHexes)
-  config.colourTo = pick(allColourHexes)
+  config.colourFrom = pick(allColourHexes) as string
+  config.colourCatalyst = pick(allColourHexes) as string
+  config.colourTo = pick(allColourHexes) as string
   config.variant = pick(['wireframe', 'filled', 'gradient'] as const)
   config.align = pick(['left', 'right', 'top', 'bottom', 'center'] as const)
   config.spread = Math.round((Math.random() * 9.5 + 0.5) * 10) / 10
   config.scaleFrom = Math.round((Math.random() * 1.5 + 0.5) * 100) / 100
   config.scaleTo = Math.round((Math.random() * 1.5 + 0.5) * 100) / 100
-  config.background = pick(backgroundOptions)
+  config.background = pick(Object.values(backgroundOptions))
   gui.controllersRecursive().forEach(c => c.updateDisplay())
   onConfigChange()
 }
@@ -340,9 +345,9 @@ shapeFolder.add(config, 'to', shapeNames).name('To').onChange(onConfigChange)
 shapeFolder.add(config, 'steps', 5, 15, 1).name('Steps').onChange(onConfigChange)
 
 const colourFolder = gui.addFolder('Colour')
-colourFolder.add(config, 'colourFrom', allColourHexes).name('From').onChange(onConfigChange)
-colourFolder.add(config, 'colourCatalyst', allColourHexes).name('Catalyst').onChange(onConfigChange)
-colourFolder.add(config, 'colourTo', allColourHexes).name('To').onChange(onConfigChange)
+colourFolder.add(config, 'colourFrom', allColourOptions).name('From').onChange(onConfigChange)
+colourFolder.add(config, 'colourCatalyst', allColourOptions).name('Catalyst').onChange(onConfigChange)
+colourFolder.add(config, 'colourTo', allColourOptions).name('To').onChange(onConfigChange)
 colourFolder.add(config, 'background', backgroundOptions).name('Background').onChange(onConfigChange)
 
 const effectsFolder = gui.addFolder('Effects')

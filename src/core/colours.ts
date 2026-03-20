@@ -49,3 +49,8 @@ export const PRESET_EXTRAS: BrandColour[] = [
 ]
 
 export const allColourHexes = [...brandColourHexes, ...PRESET_EXTRAS.map(c => c.hex)]
+
+/** Label→hex map for lil-gui dropdowns: "Lime (#BEF958)" → "#BEF958" */
+export const allColourOptions: Record<string, string> = Object.fromEntries(
+  [...BRAND_PALETTE, ...PRESET_EXTRAS].map(c => [`${c.name} (${c.hex})`, c.hex])
+)
