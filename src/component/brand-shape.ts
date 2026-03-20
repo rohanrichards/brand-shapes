@@ -2,7 +2,6 @@ import { LitElement, html, css, type PropertyValues } from 'lit'
 import { render, type RenderConfig, type Variant, type Alignment } from '../renderer/canvas-renderer'
 import { DEFAULT_NOISE_CONFIG } from '../core/effects'
 import type { ShapeName } from '../core/shapes'
-import type { ColourFamily } from '../core/colours'
 
 export class BrandShape extends LitElement {
   static override styles = css`
@@ -22,7 +21,10 @@ export class BrandShape extends LitElement {
     from: { type: String },
     to: { type: String },
     steps: { type: Number },
-    scheme: { type: String },
+    colourFrom: { type: String, attribute: 'colour-from' },
+    colourCatalyst: { type: String, attribute: 'colour-catalyst' },
+    colourTo: { type: String, attribute: 'colour-to' },
+    background: { type: String },
     variant: { type: String },
     noiseEnabled: { type: Boolean, attribute: 'noise' },
     blurEnabled: { type: Boolean, attribute: 'blur' },
@@ -40,7 +42,10 @@ export class BrandShape extends LitElement {
   from: ShapeName = 'organic-1'
   to: ShapeName = 'angular-3'
   steps = 8
-  scheme: ColourFamily = 'lime'
+  colourFrom = '#4B01E6'
+  colourCatalyst = '#BEF958'
+  colourTo = '#FEA6E1'
+  background = 'transparent'
   variant: Variant = 'filled'
   noiseEnabled = false
   blurEnabled = false
@@ -83,7 +88,12 @@ export class BrandShape extends LitElement {
       from: this.from,
       to: this.to,
       steps: this.steps,
-      scheme: this.scheme,
+      colours: {
+        current: this.colourFrom,
+        catalyst: this.colourCatalyst,
+        future: this.colourTo,
+      },
+      background: this.background,
       variant: this.variant,
       noise: {
         enabled: this.noiseEnabled,
