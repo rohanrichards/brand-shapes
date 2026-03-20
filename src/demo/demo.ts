@@ -50,8 +50,8 @@ function buildRenderConfig(customSteps?: string[]): RenderConfig {
     steps: config.steps,
     colours: {
       current: config.colourFrom,
-      catalyst: config.colourCatalyst,
-      future: config.colourTo,
+      catalyst: config.colourTo,
+      future: config.colourCatalyst,
     },
     background: config.background,
     variant: config.variant,

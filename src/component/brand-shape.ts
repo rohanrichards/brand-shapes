@@ -90,8 +90,8 @@ export class BrandShape extends LitElement {
       steps: this.steps,
       colours: {
         current: this.colourFrom,
-        catalyst: this.colourCatalyst,
-        future: this.colourTo,
+        catalyst: this.colourTo,
+        future: this.colourCatalyst,
       },
       background: this.background,
       variant: this.variant,
