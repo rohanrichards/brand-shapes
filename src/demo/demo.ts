@@ -2,7 +2,7 @@ import GUI from 'lil-gui'
 import { render, type RenderConfig } from '../renderer/canvas-renderer'
 import { shapeNames, getShape } from '../core/shapes'
 import { DEFAULT_NOISE_CONFIG } from '../core/effects'
-import { createMorphInterpolator, getMorphPoints, smoothPath, type Point } from '../core/morph'
+import { getMorphPoints, smoothPath, type Point } from '../core/morph'
 import { displacePoints, DEFAULT_VERTEX_ANIM, type VertexAnimConfig, type PulseState } from '../core/animate'
 import { presets, presetNames } from './presets'
 import { allColourHexes, allColourOptions } from '../core/colours'
@@ -31,7 +31,8 @@ const config = {
   breathingAmplitude: DEFAULT_VERTEX_ANIM.breathingAmplitude,
   breathingSpeed: DEFAULT_VERTEX_ANIM.breathingSpeed,
   breathingFrequency: DEFAULT_VERTEX_ANIM.breathingFrequency,
-  cursorParallax: 0.03,
+  cursorParallaxEnabled: false,
+  cursorParallaxIntensity: 0.03,
   pulseAmplitude: DEFAULT_VERTEX_ANIM.pulseAmplitude,
   pulseInterval: DEFAULT_VERTEX_ANIM.pulseInterval,
   pulseSharpness: DEFAULT_VERTEX_ANIM.pulseSharpness,
@@ -87,26 +88,6 @@ function buildRenderConfig(customSteps?: string[]): RenderConfig {
   }
 }
 
-function renderStatic() {
-  const fromShape = getShape(config.from as any)
-  const toShape = getShape(config.to as any)
-  const interp = createMorphInterpolator(fromShape.path, toShape.path)
-  const totalSteps = config.steps
-
-  const paths: string[] = []
-  const indices: number[] = []
-  for (let i = 0; i < totalSteps; i++) {
-    const t = totalSteps === 1 ? 0 : i / (totalSteps - 1)
-    paths.push(interp(t))
-    indices.push(i)
-  }
-
-  const rc = buildRenderConfig(paths)
-  rc.stepIndices = indices
-  rc.totalStepCount = totalSteps
-  render(canvas, rc)
-}
-
 // --- Animation state ---
 
 let animId: number | null = null
@@ -115,6 +96,66 @@ function stopAnimation() {
   if (animId != null) {
     cancelAnimationFrame(animId)
     animId = null
+  }
+}
+
+// --- Cursor parallax helpers ---
+
+function getCursorParallaxOffset(): { x: number; y: number } {
+  if (!config.cursorParallaxEnabled || !cursorState) return { x: 0, y: 0 }
+  const fromShape = getShape(config.from as any)
+  const vb = fromShape.viewBox.split(' ').map(Number)
+  return {
+    x: (cursorState.x - vb[2] / 2) * config.cursorParallaxIntensity,
+    y: (cursorState.y - vb[3] / 2) * config.cursorParallaxIntensity,
+  }
+}
+
+function applyParallaxToLayers(layerPoints: Point[][], indices: number[]): string[] {
+  const offset = getCursorParallaxOffset()
+  const totalLayers = layerPoints.length
+  return layerPoints.map((pts, i) => {
+    if (offset.x === 0 && offset.y === 0) return smoothPath(pts)
+    const depth = totalLayers === 1 ? 0 : i / (totalLayers - 1)
+    const shifted = pts.map(([x, y]) => [
+      x - offset.x * depth,
+      y - offset.y * depth,
+    ] as Point)
+    return smoothPath(shifted)
+  })
+}
+
+function renderLayerPoints(layerPoints: Point[][], indices: number[]) {
+  const paths = applyParallaxToLayers(layerPoints, indices)
+  const rc = buildRenderConfig(paths)
+  rc.stepIndices = indices
+  rc.totalStepCount = config.steps
+  render(canvas, rc)
+}
+
+// --- Static render ---
+
+function renderStatic() {
+  const fromShape = getShape(config.from as any)
+  const toShape = getShape(config.to as any)
+  const totalSteps = config.steps
+
+  const basePoints: Point[][] = []
+  const indices: number[] = []
+  for (let i = 0; i < totalSteps; i++) {
+    const t = totalSteps === 1 ? 0 : i / (totalSteps - 1)
+    basePoints.push(getMorphPoints(fromShape.path, toShape.path, t))
+    indices.push(i)
+  }
+
+  renderLayerPoints(basePoints, indices)
+
+  if (config.cursorParallaxEnabled) {
+    function tick() {
+      renderLayerPoints(basePoints, indices)
+      animId = requestAnimationFrame(tick)
+    }
+    animId = requestAnimationFrame(tick)
   }
 }
 
@@ -127,14 +168,16 @@ function startTrailAnimation() {
 
   const fromShape = getShape(config.from as any)
   const toShape = getShape(config.to as any)
-  const interp = createMorphInterpolator(fromShape.path, toShape.path)
   const totalSteps = config.steps
   const duration = config.duration
   const startTime = performance.now()
 
   const stepTs: number[] = []
+  const stepPoints: Point[][] = []
   for (let i = 0; i < totalSteps; i++) {
-    stepTs.push(totalSteps === 1 ? 0 : i / (totalSteps - 1))
+    const t = totalSteps === 1 ? 0 : i / (totalSteps - 1)
+    stepTs.push(t)
+    stepPoints.push(getMorphPoints(fromShape.path, toShape.path, t))
   }
 
   function tick(now: number) {
@@ -144,27 +187,24 @@ function startTrailAnimation() {
       ? 4 * progress * progress * progress
       : 1 - Math.pow(-2 * progress + 2, 3) / 2
 
-    const paths: string[] = []
+    const points: Point[][] = []
     const indices: number[] = []
     for (let i = 0; i < totalSteps; i++) {
       if (leadT >= stepTs[i]) {
-        paths.push(interp(stepTs[i]))
+        points.push(stepPoints[i])
         indices.push(i)
       }
     }
 
-    const lastDepositedT = paths.length > 0 ? stepTs[paths.length - 1] : 0
+    const lastDepositedT = points.length > 0 ? stepTs[points.length - 1] : 0
     if (leadT > lastDepositedT && progress < 1) {
-      paths.push(interp(leadT))
+      points.push(getMorphPoints(fromShape.path, toShape.path, leadT))
       indices.push(leadT * (totalSteps - 1))
     }
 
-    const rc = buildRenderConfig(paths)
-    rc.stepIndices = indices
-    rc.totalStepCount = totalSteps
-    render(canvas, rc)
+    renderLayerPoints(points, indices)
 
-    if (progress < 1) {
+    if (progress < 1 || config.cursorParallaxEnabled) {
       animId = requestAnimationFrame(tick)
     } else {
       animId = null
@@ -244,44 +284,16 @@ function startBreatheAnimation() {
       pulseCascadeDelay: config.pulseCascadeDelay,
     }
 
-    // Cursor parallax: each layer shifts away from cursor.
-    // Inner layers (higher index) shift more, creating depth.
-    let cursorOffsetX = 0
-    let cursorOffsetY = 0
-    if (cursorState) {
-      // Direction from shape center to cursor
-      const fromShape = getShape(config.from as any)
-      const vb = fromShape.viewBox.split(' ').map(Number)
-      const shapeCX = vb[2] / 2
-      const shapeCY = vb[3] / 2
-      // Vector from center toward cursor (in shape units)
-      cursorOffsetX = (cursorState.x - shapeCX) * config.cursorParallax
-      cursorOffsetY = (cursorState.y - shapeCY) * config.cursorParallax
-    }
-
-    const paths: string[] = []
+    const displacedLayers: Point[][] = []
     const indices: number[] = []
     for (let i = 0; i < totalSteps; i++) {
-      const displaced = displacePoints(
+      displacedLayers.push(displacePoints(
         basePointSets[i], time, vertexConfig, i, pulseState,
-      )
-
-      // Apply cursor parallax: shift each layer proportionally to its depth
-      const layerDepth = totalSteps === 1 ? 0 : i / (totalSteps - 1)
-      const shifted = displaced.map(([x, y]) => [
-        x - cursorOffsetX * layerDepth,
-        y - cursorOffsetY * layerDepth,
-      ] as [number, number])
-
-      paths.push(smoothPath(shifted))
+      ))
       indices.push(i)
     }
 
-    const rc = buildRenderConfig(paths)
-    rc.stepIndices = indices
-    rc.totalStepCount = totalSteps
-
-    render(canvas, rc)
+    renderLayerPoints(displacedLayers, indices)
 
     animId = requestAnimationFrame(tick)
   }
@@ -394,19 +406,35 @@ addLockToggle(layoutFolder.add(config, 'scaleFrom', 0.5, 2.0, 0.05).name('Scale 
 addLockToggle(layoutFolder.add(config, 'scaleTo', 0.5, 2.0, 0.05).name('Scale To').onChange(onConfigChange), 'scaleTo')
 
 const animFolder = gui.addFolder('Animation')
-animFolder.add(config, 'animMode', ['none', 'trail', 'breathe']).name('Mode').onChange(onConfigChange)
-animFolder.add(config, 'duration', 500, 5000, 100).name('Trail Duration')
-animFolder.add({ replay: () => { if (config.animMode === 'trail') startTrailAnimation() } }, 'replay').name('Replay Trail')
+animFolder.add(config, 'animMode', ['none', 'trail', 'breathe']).name('Mode').onChange(() => {
+  updateAnimFolders()
+  onConfigChange()
+})
 
-const breatheFolder = gui.addFolder('Breathe')
+const trailFolder = animFolder.addFolder('Trail')
+trailFolder.add(config, 'duration', 500, 5000, 100).name('Duration')
+trailFolder.add({ replay: () => { if (config.animMode === 'trail') startTrailAnimation() } }, 'replay').name('Replay')
+
+const breatheFolder = animFolder.addFolder('Breathe')
 breatheFolder.add(config, 'breathingAmplitude', 0, 5, 0.1).name('Breathing Amp')
 breatheFolder.add(config, 'breathingSpeed', 0.1, 2, 0.05).name('Breathing Speed')
 breatheFolder.add(config, 'breathingFrequency', 0.01, 0.3, 0.01).name('Breathing Freq')
-breatheFolder.add(config, 'cursorParallax', 0, 0.15, 0.005).name('Cursor Parallax')
 breatheFolder.add(config, 'pulseAmplitude', 0, 15, 0.5).name('Pulse Amp')
 breatheFolder.add(config, 'pulseInterval', 1, 10, 0.5).name('Pulse Interval')
 breatheFolder.add(config, 'pulseSharpness', 2, 30, 1).name('Pulse Sharpness')
 breatheFolder.add(config, 'pulseCascadeDelay', 0, 0.3, 0.01).name('Cascade Delay')
+
+const cursorParallaxFolder = animFolder.addFolder('Cursor Parallax')
+cursorParallaxFolder.add(config, 'cursorParallaxEnabled').name('Enabled').onChange(onConfigChange)
+cursorParallaxFolder.add(config, 'cursorParallaxIntensity', 0, 0.15, 0.005).name('Intensity')
+
+function updateAnimFolders() {
+  const mode = config.animMode
+  mode === 'trail' ? trailFolder.show() : trailFolder.hide()
+  mode === 'breathe' ? breatheFolder.show() : breatheFolder.hide()
+}
+
+updateAnimFolders()
 
 const exportConfig = {
   transparentBg: false,
