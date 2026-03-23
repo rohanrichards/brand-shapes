@@ -39,6 +39,21 @@ const config = {
   preset: 'Organic Flow',
 }
 
+const locks = {
+  from: false,
+  to: false,
+  steps: false,
+  colourFrom: false,
+  colourCatalyst: false,
+  colourTo: false,
+  background: false,
+  variant: false,
+  align: false,
+  spread: false,
+  scaleFrom: false,
+  scaleTo: false,
+}
+
 const canvas = document.getElementById('canvas') as HTMLCanvasElement
 
 // --- Render helpers ---
@@ -321,47 +336,62 @@ const backgroundOptions: Record<string, string> = {
 
 function randomize() {
   const pick = <T>(arr: readonly T[]): T => arr[Math.floor(Math.random() * arr.length)]
-  config.from = pick(shapeNames) as any
-  config.to = pick(shapeNames) as any
-  config.steps = Math.floor(Math.random() * 11) + 5
-  config.colourFrom = pick(allColourHexes) as string
-  config.colourCatalyst = pick(allColourHexes) as string
-  config.colourTo = pick(allColourHexes) as string
-  config.variant = pick(['wireframe', 'filled', 'gradient'] as const)
-  config.align = pick(['left', 'right', 'top', 'bottom', 'center'] as const)
-  config.spread = Math.round((Math.random() * 9.5 + 0.5) * 10) / 10
-  config.scaleFrom = Math.round((Math.random() * 1.5 + 0.5) * 100) / 100
-  config.scaleTo = Math.round((Math.random() * 1.5 + 0.5) * 100) / 100
-  config.background = pick(Object.values(backgroundOptions))
+  if (!locks.from) config.from = pick(shapeNames) as any
+  if (!locks.to) config.to = pick(shapeNames) as any
+  if (!locks.steps) config.steps = Math.floor(Math.random() * 11) + 5
+  if (!locks.colourFrom) config.colourFrom = pick(allColourHexes) as string
+  if (!locks.colourCatalyst) config.colourCatalyst = pick(allColourHexes) as string
+  if (!locks.colourTo) config.colourTo = pick(allColourHexes) as string
+  if (!locks.variant) config.variant = pick(['wireframe', 'filled', 'gradient'] as const)
+  if (!locks.align) config.align = pick(['left', 'right', 'top', 'bottom', 'center'] as const)
+  if (!locks.spread) config.spread = Math.round((Math.random() * 9.5 + 0.5) * 10) / 10
+  if (!locks.scaleFrom) config.scaleFrom = Math.round((Math.random() * 1.5 + 0.5) * 100) / 100
+  if (!locks.scaleTo) config.scaleTo = Math.round((Math.random() * 1.5 + 0.5) * 100) / 100
+  if (!locks.background) config.background = pick(Object.values(backgroundOptions))
   gui.controllersRecursive().forEach(c => c.updateDisplay())
   onConfigChange()
 }
 
 gui.add({ randomize }, 'randomize').name('Randomize')
 
+// --- Inline lock toggles ---
+
+function addLockToggle(controller: ReturnType<GUI['add']>, lockKey: keyof typeof locks) {
+  const baseName = controller._name
+  const nameEl = (controller as any).$name as HTMLElement
+  nameEl.style.cursor = 'pointer'
+  nameEl.title = 'Click to toggle lock'
+  nameEl.textContent = `🔓 ${baseName}`
+  nameEl.addEventListener('click', (e) => {
+    e.stopPropagation()
+    locks[lockKey] = !locks[lockKey]
+    nameEl.textContent = locks[lockKey] ? `🔒 ${baseName}` : `🔓 ${baseName}`
+  })
+}
+
 const shapeFolder = gui.addFolder('Shape')
-shapeFolder.add(config, 'from', shapeNames).name('From').onChange(onConfigChange)
-shapeFolder.add(config, 'to', shapeNames).name('To').onChange(onConfigChange)
-shapeFolder.add(config, 'steps', 5, 15, 1).name('Steps').onChange(onConfigChange)
+addLockToggle(shapeFolder.add(config, 'from', shapeNames).name('From').onChange(onConfigChange), 'from')
+addLockToggle(shapeFolder.add(config, 'to', shapeNames).name('To').onChange(onConfigChange), 'to')
+addLockToggle(shapeFolder.add(config, 'steps', 5, 15, 1).name('Steps').onChange(onConfigChange), 'steps')
 
 const colourFolder = gui.addFolder('Colour')
-colourFolder.add(config, 'colourFrom', allColourOptions).name('From').onChange(onConfigChange)
-colourFolder.add(config, 'colourCatalyst', allColourOptions).name('Catalyst').onChange(onConfigChange)
-colourFolder.add(config, 'colourTo', allColourOptions).name('To').onChange(onConfigChange)
-colourFolder.add(config, 'background', backgroundOptions).name('Background').onChange(onConfigChange)
+addLockToggle(colourFolder.add(config, 'colourFrom', allColourOptions).name('From').onChange(onConfigChange), 'colourFrom')
+addLockToggle(colourFolder.add(config, 'colourCatalyst', allColourOptions).name('Catalyst').onChange(onConfigChange), 'colourCatalyst')
+addLockToggle(colourFolder.add(config, 'colourTo', allColourOptions).name('To').onChange(onConfigChange), 'colourTo')
+addLockToggle(colourFolder.add(config, 'background', backgroundOptions).name('Background').onChange(onConfigChange), 'background')
 
 const effectsFolder = gui.addFolder('Effects')
-effectsFolder.add(config, 'variant', ['wireframe', 'filled', 'gradient']).name('Variant').onChange(onConfigChange)
+addLockToggle(effectsFolder.add(config, 'variant', ['wireframe', 'filled', 'gradient']).name('Variant').onChange(onConfigChange), 'variant')
 effectsFolder.add(config, 'noise').name('Noise').onChange(onConfigChange)
 effectsFolder.add(config, 'blur').name('Blur').onChange(onConfigChange)
 effectsFolder.add(config, 'noiseOpacity', 0, 0.5, 0.01).name('Noise Opacity').onChange(onConfigChange)
 effectsFolder.add(config, 'blurRadius', 0, 10, 0.5).name('Blur Radius').onChange(onConfigChange)
 
 const layoutFolder = gui.addFolder('Layout')
-layoutFolder.add(config, 'align', ['left', 'right', 'top', 'bottom', 'center']).name('Align').onChange(onConfigChange)
-layoutFolder.add(config, 'spread', 0, 10, 0.1).name('Spread').onChange(onConfigChange)
-layoutFolder.add(config, 'scaleFrom', 0.5, 2.0, 0.05).name('Scale From').onChange(onConfigChange)
-layoutFolder.add(config, 'scaleTo', 0.5, 2.0, 0.05).name('Scale To').onChange(onConfigChange)
+addLockToggle(layoutFolder.add(config, 'align', ['left', 'right', 'top', 'bottom', 'center']).name('Align').onChange(onConfigChange), 'align')
+addLockToggle(layoutFolder.add(config, 'spread', 0, 10, 0.1).name('Spread').onChange(onConfigChange), 'spread')
+addLockToggle(layoutFolder.add(config, 'scaleFrom', 0.5, 2.0, 0.05).name('Scale From').onChange(onConfigChange), 'scaleFrom')
+addLockToggle(layoutFolder.add(config, 'scaleTo', 0.5, 2.0, 0.05).name('Scale To').onChange(onConfigChange), 'scaleTo')
 
 const animFolder = gui.addFolder('Animation')
 animFolder.add(config, 'animMode', ['none', 'trail', 'breathe']).name('Mode').onChange(onConfigChange)
