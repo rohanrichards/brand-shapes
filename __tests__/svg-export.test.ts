@@ -84,3 +84,66 @@ describe('generateSVG — wireframe', () => {
     expect(svg).toContain('stroke-width="1.5"')
   })
 })
+
+function makeFilledConfig(overrides: Partial<SVGExportConfig> = {}): SVGExportConfig {
+  return {
+    width: 800,
+    height: 600,
+    viewBox: [0, 0, 164, 104] as [number, number, number, number],
+    background: '#000000',
+    variant: 'filled',
+    noise: false,
+    colours: { current: '#4B01E6', catalyst: '#BEF958', future: '#FEA6E1' },
+    steps: [
+      { path: 'M 10 10 L 90 10 L 90 90 Z', centroid: [63.3, 36.7], transform: { scale: 1.1, offsetX: 5, offsetY: 0 }, opacity: 1.0, gradientImage: 'data:image/jpeg;base64,/9j/fake1' },
+      { path: 'M 20 20 L 80 20 L 80 80 Z', centroid: [60, 40], transform: { scale: 0.95, offsetX: 0, offsetY: 0 }, opacity: 1.0, gradientImage: 'data:image/jpeg;base64,/9j/fake2' },
+    ],
+    ...overrides,
+  }
+}
+
+describe('generateSVG — filled', () => {
+  it('includes clipPath per step in defs', () => {
+    const svg = generateSVG(makeFilledConfig())
+    expect(svg).toContain('<clipPath id="clip-0">')
+    expect(svg).toContain('<clipPath id="clip-1">')
+  })
+
+  it('each layer references its clipPath', () => {
+    const svg = generateSVG(makeFilledConfig())
+    expect(svg).toContain('clip-path="url(#clip-0)"')
+    expect(svg).toContain('clip-path="url(#clip-1)"')
+  })
+
+  it('includes image element with gradient data URL', () => {
+    const svg = generateSVG(makeFilledConfig())
+    expect(svg).toContain('href="data:image/jpeg;base64,/9j/fake1"')
+    expect(svg).toContain('href="data:image/jpeg;base64,/9j/fake2"')
+  })
+
+  it('applies transform with centroid pivot', () => {
+    const svg = generateSVG(makeFilledConfig())
+    // First step: centroid [63.3, 36.7], scale 1.1, offset (5, 0)
+    expect(svg).toContain('translate(68.3,36.7) scale(1.1) translate(-63.3,-36.7)')
+  })
+
+  it('does not include linearGradient (that is wireframe only)', () => {
+    const svg = generateSVG(makeFilledConfig())
+    expect(svg).not.toContain('<linearGradient')
+  })
+})
+
+describe('generateSVG — gradient variant', () => {
+  it('applies opacity per step', () => {
+    const config = makeFilledConfig({
+      variant: 'gradient',
+      steps: [
+        { path: 'M 10 10 L 90 90', centroid: [50, 50], transform: { scale: 1, offsetX: 0, offsetY: 0 }, opacity: 0.05, gradientImage: 'data:image/jpeg;base64,/9j/x' },
+        { path: 'M 20 20 L 80 80', centroid: [50, 50], transform: { scale: 1, offsetX: 0, offsetY: 0 }, opacity: 1.0, gradientImage: 'data:image/jpeg;base64,/9j/y' },
+      ],
+    })
+    const svg = generateSVG(config)
+    expect(svg).toContain('opacity="0.05"')
+    expect(svg).toContain('opacity="1"')
+  })
+})

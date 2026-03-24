@@ -65,6 +65,42 @@ function wireframeBody(config: SVGExportConfig): string {
   return paths
 }
 
+function filledGradientDefs(config: SVGExportConfig): string {
+  const clipPaths = config.steps.map((step, i) =>
+    `<clipPath id="clip-${i}">
+      <path d="${step.path}"/>
+    </clipPath>`
+  ).join('\n    ')
+
+  let defs = clipPaths
+  if (config.noise) {
+    defs += `\n    ${noiseFilterDef()}`
+  }
+
+  return defs
+}
+
+function filledGradientBody(config: SVGExportConfig): string {
+  const [, , vw, vh] = config.viewBox
+
+  return config.steps.map((step, i) => {
+    const { scale, offsetX, offsetY } = step.transform
+    const [cx, cy] = step.centroid
+    const tx = cx + offsetX
+    const ty = cy + offsetY
+
+    const transform = scale !== 1 || offsetX !== 0 || offsetY !== 0
+      ? ` transform="translate(${tx},${ty}) scale(${scale}) translate(${-cx},${-cy})"`
+      : ''
+
+    const href = step.gradientImage ?? ''
+
+    return `<g clip-path="url(#clip-${i})" opacity="${step.opacity}"${transform}>
+      <image href="${href}" width="${vw}" height="${vh}"/>
+    </g>`
+  }).join('\n    ')
+}
+
 export function generateSVG(config: SVGExportConfig): string {
   const { width, height, viewBox, background } = config
   const [vx, vy, vw, vh] = viewBox
@@ -79,9 +115,8 @@ export function generateSVG(config: SVGExportConfig): string {
       break
     case 'filled':
     case 'gradient':
-      // Implemented in Task 3
-      defs = ''
-      body = ''
+      defs = filledGradientDefs(config)
+      body = filledGradientBody(config)
       break
   }
 
