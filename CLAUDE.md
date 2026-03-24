@@ -46,7 +46,7 @@ These were decided through rigorous analysis (FirstPrinciples + Research + Counc
 - **GSAP MorphSVGPlugin over flubber** — flubber is dead (2018), GSAP is free and superior
 - **Lit over React/Vue** — framework-agnostic Web Components
 - **lil-gui over custom panel** — 4KB, auto-generated from config object
-- **No SVG export** — screen-only rendering confirmed
+- **SVG export** — vector clip paths with rasterized gradient fills for cross-platform compatibility
 - **No WebGL/PixiJS** — premature at this scale (1-15 shapes)
 
 ## Porting From
