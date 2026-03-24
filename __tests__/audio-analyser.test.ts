@@ -1,6 +1,6 @@
 // __tests__/audio-analyser.test.ts
 import { describe, it, expect } from 'vitest'
-import { BANDS, createBandBinRanges, extractBandLevels, type BandConfig, type BandBinRange } from '../src/core/audio-analyser'
+import { BANDS, createBandBinRanges, extractBandLevels, normalizeLevels, createNormalizationHistory, type BandConfig, type BandBinRange, type NormalizationHistory } from '../src/core/audio-analyser'
 
 describe('BANDS', () => {
   it('has exactly 7 bands', () => {
@@ -84,5 +84,58 @@ describe('extractBandLevels', () => {
     const levels = extractBandLevels(data, binRanges)
     // Brilliance (aWeight 2.0) should be higher than sub-bass (aWeight 0.6)
     expect(levels[6]).toBeGreaterThan(levels[0])
+  })
+})
+
+describe('createNormalizationHistory', () => {
+  it('initializes with 7 Infinity min values', () => {
+    const h = createNormalizationHistory()
+    expect(h.min).toHaveLength(7)
+    for (const v of h.min) expect(v).toBe(Infinity)
+  })
+
+  it('initializes with 7 -Infinity max values', () => {
+    const h = createNormalizationHistory()
+    expect(h.max).toHaveLength(7)
+    for (const v of h.max) expect(v).toBe(-Infinity)
+  })
+
+  it('accepts custom adaptation rate', () => {
+    const h = createNormalizationHistory(0.05)
+    expect(h.adaptationRate).toBe(0.05)
+  })
+})
+
+describe('normalizeLevels', () => {
+  it('returns values between 0 and 1', () => {
+    const history = createNormalizationHistory()
+    const levels = [0.1, 0.5, 0.3, 0.8, 0.2, 0.6, 0.4]
+    // Feed several frames to build up history
+    for (let i = 0; i < 20; i++) {
+      normalizeLevels(levels, history)
+    }
+    const result = normalizeLevels(levels, history)
+    for (const v of result) {
+      expect(v).toBeGreaterThanOrEqual(0)
+      expect(v).toBeLessThanOrEqual(1)
+    }
+  })
+
+  it('adapts to louder input over time', () => {
+    const history = createNormalizationHistory()
+    const quiet = [0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01]
+    const loud = [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]
+    // Build quiet baseline
+    for (let i = 0; i < 30; i++) normalizeLevels(quiet, history)
+    // Loud input should initially produce high normalized values
+    const firstLoud = normalizeLevels(loud, history)
+    expect(firstLoud[0]).toBeGreaterThan(0.5)
+  })
+
+  it('returns 7 values for 7 inputs', () => {
+    const history = createNormalizationHistory()
+    const levels = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7]
+    const result = normalizeLevels(levels, history)
+    expect(result).toHaveLength(7)
   })
 })

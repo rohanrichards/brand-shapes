@@ -59,3 +59,38 @@ export function extractBandLevels(frequencyData: Float32Array, binRanges: BandBi
     return avg * aWeight
   })
 }
+
+export interface NormalizationHistory {
+  min: number[]
+  max: number[]
+  adaptationRate: number
+}
+
+export function createNormalizationHistory(adaptationRate = 0.02): NormalizationHistory {
+  return {
+    min: new Array(7).fill(Infinity),
+    max: new Array(7).fill(-Infinity),
+    adaptationRate,
+  }
+}
+
+/**
+ * Normalize band levels to 0-1 using running min/max per band.
+ * Mutates history in place for efficiency. Slow adaptation prevents sudden jumps.
+ */
+export function normalizeLevels(levels: number[], history: NormalizationHistory): number[] {
+  const rate = history.adaptationRate
+  return levels.map((level, i) => {
+    // Update running min/max with slow adaptation
+    if (history.min[i] === Infinity) {
+      history.min[i] = level
+      history.max[i] = level
+    } else {
+      history.min[i] += (Math.min(level, history.min[i]) - history.min[i]) * rate
+      history.max[i] += (Math.max(level, history.max[i]) - history.max[i]) * rate
+    }
+    const range = history.max[i] - history.min[i]
+    if (range < 0.0001) return 0
+    return Math.max(0, Math.min(1, (level - history.min[i]) / range))
+  })
+}
