@@ -64,7 +64,8 @@ describe('generateSVG — wireframe', () => {
 
   it('omits background rect when transparent', () => {
     const svg = generateSVG(makeWireframeConfig({ background: 'transparent' }))
-    expect(svg).not.toContain('<rect')
+    expect(svg).not.toContain('fill="#000000"')
+    expect(svg).not.toContain('width="100%" height="100%" fill=')
   })
 
   it('includes rasterized noise pattern when enabled with noiseImage', () => {

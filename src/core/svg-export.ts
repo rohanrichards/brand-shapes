@@ -201,11 +201,18 @@ export function generateSVG(config: SVGExportConfig): string {
     ? `\n  <rect width="100%" height="100%" fill="${background}"/>`
     : ''
 
+  // Clip shapes to viewport bounds — matches canvas behavior where
+  // shapes extending beyond the canvas edge are naturally invisible
+  const viewportClip = `<clipPath id="viewport-clip">
+      <rect x="${vx}" y="${vy}" width="${vw}" height="${vh}"/>
+    </clipPath>`
+
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="${vx} ${vy} ${vw} ${vh}">
   <defs>
     ${defs}
+    ${viewportClip}
   </defs>${bgRect}
-  <g>
+  <g clip-path="url(#viewport-clip)">
     ${body}
   </g>
 </svg>`
