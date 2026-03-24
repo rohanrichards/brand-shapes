@@ -621,7 +621,7 @@ audioSourceController = audioFolder.add(config, 'audioSource', {
     switchAudioSource(source)
   }
 })
-audioFolder.add(config, 'audioSensitivity', 0.1, 3.0, 0.1).name('Sensitivity')
+audioFolder.add(config, 'audioSensitivity', 0.1, 5.0, 0.1).name('Sensitivity')
 
 function updateAnimFolders() {
   const mode = config.animMode
