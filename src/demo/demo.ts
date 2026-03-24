@@ -755,6 +755,7 @@ function exportSVG() {
     colours,
     steps,
     baseTransform: { translateX: tx, translateY: ty, scale: baseScale },
+    shapeViewBox: vb,
   }
 
   const svgString = generateSVG(svgConfig)

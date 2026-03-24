@@ -32,6 +32,8 @@ export interface SVGExportConfig {
   steps: SVGExportStep[]
   /** Base transform matching the canvas renderer's viewBox→screen mapping */
   baseTransform?: { translateX: number; translateY: number; scale: number }
+  /** Original shape viewBox (e.g., [0,0,164,104]) — used for image sizing inside base transform */
+  shapeViewBox?: [number, number, number, number]
 }
 
 function noiseFilterDef(opacity: number): string {
@@ -100,7 +102,9 @@ function filledGradientDefs(config: SVGExportConfig): string {
 
 function filledGradientBody(config: SVGExportConfig): string {
   const bt = config.baseTransform
-  const [, , vw, vh] = config.viewBox
+  // Inside the base transform group, coordinates are in shape space — use shapeViewBox
+  const svb = config.shapeViewBox ?? config.viewBox
+  const [, , vw, vh] = svb
 
   // The canvas renderer's per-layer transform (inside the base translate+scale):
   //   translate(shapeCenterCanvasX + offsetX, shapeCenterCanvasY + offsetY)
