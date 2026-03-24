@@ -1,6 +1,6 @@
 // __tests__/audio-analyser.test.ts
 import { describe, it, expect } from 'vitest'
-import { BANDS, createBandBinRanges, type BandConfig, type BandBinRange } from '../src/core/audio-analyser'
+import { BANDS, createBandBinRanges, extractBandLevels, type BandConfig, type BandBinRange } from '../src/core/audio-analyser'
 
 describe('BANDS', () => {
   it('has exactly 7 bands', () => {
@@ -48,5 +48,41 @@ describe('createBandBinRanges', () => {
     for (let i = 0; i < binRanges.length; i++) {
       expect(binRanges[i].aWeight).toBe(BANDS[i].aWeight)
     }
+  })
+})
+
+describe('extractBandLevels', () => {
+  const binRanges = createBandBinRanges(1024, 44100)
+
+  it('returns 7 levels', () => {
+    const data = new Float32Array(1024).fill(-100) // silence in dBFS
+    const levels = extractBandLevels(data, binRanges)
+    expect(levels).toHaveLength(7)
+  })
+
+  it('returns 0 for silence (-100 dBFS)', () => {
+    const data = new Float32Array(1024).fill(-100)
+    const levels = extractBandLevels(data, binRanges)
+    for (const level of levels) {
+      expect(level).toBeCloseTo(0, 5)
+    }
+  })
+
+  it('returns higher values for louder bins', () => {
+    const quiet = new Float32Array(1024).fill(-60)
+    const loud = new Float32Array(1024).fill(-10)
+    const quietLevels = extractBandLevels(quiet, binRanges)
+    const loudLevels = extractBandLevels(loud, binRanges)
+    for (let i = 0; i < 7; i++) {
+      expect(loudLevels[i]).toBeGreaterThan(quietLevels[i])
+    }
+  })
+
+  it('applies A-weight factors — brilliance band boosted relative to sub-bass', () => {
+    // Same dBFS across all bins, but A-weighting should boost high bands
+    const data = new Float32Array(1024).fill(-30)
+    const levels = extractBandLevels(data, binRanges)
+    // Brilliance (aWeight 2.0) should be higher than sub-bass (aWeight 0.6)
+    expect(levels[6]).toBeGreaterThan(levels[0])
   })
 })

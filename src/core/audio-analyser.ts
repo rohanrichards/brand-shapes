@@ -38,3 +38,24 @@ export function createBandBinRanges(binCount: number, sampleRate: number): BandB
     aWeight: band.aWeight,
   }))
 }
+
+/**
+ * Extract per-band intensity levels from FFT frequency data.
+ * Input: Float32Array of dBFS values (from getFloatFrequencyData).
+ * Output: 7 linear amplitude values, A-weighted.
+ */
+export function extractBandLevels(frequencyData: Float32Array, binRanges: BandBinRange[]): number[] {
+  return binRanges.map(({ startBin, endBin, aWeight }) => {
+    let sum = 0
+    let count = 0
+    for (let bin = startBin; bin <= endBin; bin++) {
+      // Convert dBFS to linear amplitude: 10^(dBFS/20)
+      // Clamp to minimum -100 dBFS to avoid -Infinity
+      const dbfs = Math.max(frequencyData[bin], -100)
+      sum += Math.pow(10, dbfs / 20)
+      count++
+    }
+    const avg = count > 0 ? sum / count : 0
+    return avg * aWeight
+  })
+}
