@@ -751,6 +751,7 @@ function exportSVG() {
     background: exportConfig.transparentBg ? 'transparent' : config.background,
     variant: config.variant as any,
     noise: config.noise,
+    noiseOpacity: config.noiseOpacity,
     colours,
     steps,
     baseTransform: { translateX: tx, translateY: ty, scale: baseScale },

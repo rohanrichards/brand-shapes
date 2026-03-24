@@ -27,23 +27,27 @@ export interface SVGExportConfig {
   background: string
   variant: 'wireframe' | 'filled' | 'gradient'
   noise: boolean
+  noiseOpacity: number
   colours: SVGExportColours
   steps: SVGExportStep[]
   /** Base transform matching the canvas renderer's viewBox→screen mapping */
   baseTransform?: { translateX: number; translateY: number; scale: number }
 }
 
-function noiseFilterDef(): string {
-  // Noise is masked to only where shapes exist (equivalent to canvas source-atop):
-  // 1. Generate fractal noise
-  // 2. Desaturate to grayscale
-  // 3. Composite noise with source using 'in' operator (clips noise to source alpha)
-  // 4. Blend the clipped noise on top of the source
-  return `<filter id="noise" x="0%" y="0%" width="100%" height="100%">
-      <feTurbulence type="fractalNoise" baseFrequency="0.65" numOctaves="3" result="noise"/>
+function noiseFilterDef(opacity: number): string {
+  // Fine film grain, masked to shapes only:
+  // - High baseFrequency (1.5) = fine grain like per-pixel noise, not blobby Perlin
+  // - numOctaves 4 = extra detail at small scale
+  // - Desaturate to grayscale
+  // - Reduce opacity via feColorMatrix so it's subtle (matching canvas 8% opacity)
+  // - feComposite 'in' clips noise to source alpha (source-atop equivalent)
+  // - Soft-light blend is gentler than overlay — no harsh white specks
+  return `<filter id="noise" x="0%" y="0%" width="100%" height="100%" color-interpolation-filters="sRGB">
+      <feTurbulence type="fractalNoise" baseFrequency="1.5" numOctaves="4" seed="0" result="noise"/>
       <feColorMatrix type="saturate" values="0" in="noise" result="grayNoise"/>
-      <feComposite operator="in" in="grayNoise" in2="SourceGraphic" result="maskedNoise"/>
-      <feBlend in="SourceGraphic" in2="maskedNoise" mode="overlay"/>
+      <feColorMatrix type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 ${opacity} 0" in="grayNoise" result="fadedNoise"/>
+      <feComposite operator="in" in="fadedNoise" in2="SourceGraphic" result="maskedNoise"/>
+      <feBlend in="SourceGraphic" in2="maskedNoise" mode="soft-light"/>
     </filter>`
 }
 
@@ -58,7 +62,7 @@ function wireframeDefs(config: SVGExportConfig): string {
     </linearGradient>`
 
   if (config.noise) {
-    defs += `\n    ${noiseFilterDef()}`
+    defs += `\n    ${noiseFilterDef(config.noiseOpacity)}`
   }
 
   return defs
@@ -88,7 +92,7 @@ function filledGradientDefs(config: SVGExportConfig): string {
 
   let defs = clipPaths
   if (config.noise) {
-    defs += `\n    ${noiseFilterDef()}`
+    defs += `\n    ${noiseFilterDef(config.noiseOpacity)}`
   }
 
   return defs

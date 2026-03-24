@@ -10,6 +10,7 @@ function makeWireframeConfig(overrides: Partial<SVGExportConfig> = {}): SVGExpor
     background: '#000000',
     variant: 'wireframe',
     noise: false,
+    noiseOpacity: 0.08,
     colours: { current: '#4B01E6', catalyst: '#BEF958', future: '#FEA6E1' },
     steps: [
       { path: 'M 10 10 L 90 10 L 90 90 Z', centroid: [63.3, 36.7], transform: { scale: 1, offsetX: 0, offsetY: 0 }, opacity: 1.0, strokeWidth: 1.5 },
@@ -93,6 +94,7 @@ function makeFilledConfig(overrides: Partial<SVGExportConfig> = {}): SVGExportCo
     background: '#000000',
     variant: 'filled',
     noise: false,
+    noiseOpacity: 0.08,
     colours: { current: '#4B01E6', catalyst: '#BEF958', future: '#FEA6E1' },
     steps: [
       { path: 'M 10 10 L 90 10 L 90 90 Z', centroid: [63.3, 36.7], transform: { scale: 1.1, offsetX: 5, offsetY: 0 }, opacity: 1.0, gradientImage: 'data:image/jpeg;base64,/9j/fake1' },
