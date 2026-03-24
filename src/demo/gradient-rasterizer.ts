@@ -11,22 +11,28 @@ export interface ConicGradientOptions {
 
 /**
  * Rasterize a conic gradient to a base64 JPEG data URL.
- * Renders to a square canvas (keeps gradient circular) sized to max(vbW, vbH) * scaleFactor.
- * The gradient is positioned so its center aligns with (centerX, centerY) in viewBox space.
+ * Matches the canvas renderer exactly: gradient centered on (centerX, centerY)
+ * covering the area (-50, -50) to (vbW+50, vbH+50) in shape space.
+ * The resulting image maps 1:1 to <image x="-50" y="-50" width="vbW+100" height="vbH+100"/>.
  */
 export function rasterizeConicGradient(options: ConicGradientOptions, scaleFactor = 4): string {
   const { colours, angleDeg, centerX, centerY, viewBoxWidth, viewBoxHeight } = options
-  const size = Math.ceil(Math.max(viewBoxWidth, viewBoxHeight) * scaleFactor)
+
+  // Canvas covers the same area as the SVG image: (-50,-50) to (vbW+50, vbH+50)
+  const coverW = viewBoxWidth + 100
+  const coverH = viewBoxHeight + 100
+  const canvasW = Math.ceil(coverW * scaleFactor)
+  const canvasH = Math.ceil(coverH * scaleFactor)
 
   const canvas = document.createElement('canvas')
-  canvas.width = size
-  canvas.height = size
+  canvas.width = canvasW
+  canvas.height = canvasH
   const ctx = canvas.getContext('2d')!
 
-  // Map viewBox coordinates to canvas coordinates
-  const scale = size / Math.max(viewBoxWidth, viewBoxHeight)
-  const canvasCX = centerX * scale
-  const canvasCY = centerY * scale
+  // Map shape-space coordinates to canvas pixels
+  // The image covers (-50, -50) to (vbW+50, vbH+50), so shape coord X maps to (X + 50) * scaleFactor
+  const canvasCX = (centerX + 50) * scaleFactor
+  const canvasCY = (centerY + 50) * scaleFactor
 
   const angleRad = (angleDeg * Math.PI) / 180
   const gradient = ctx.createConicGradient(angleRad, canvasCX, canvasCY)
@@ -36,7 +42,7 @@ export function rasterizeConicGradient(options: ConicGradientOptions, scaleFacto
   gradient.addColorStop(1, colours.current)
 
   ctx.fillStyle = gradient
-  ctx.fillRect(0, 0, size, size)
+  ctx.fillRect(0, 0, canvasW, canvasH)
 
   return canvas.toDataURL('image/jpeg', 0.9)
 }
