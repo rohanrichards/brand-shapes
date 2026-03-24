@@ -84,33 +84,11 @@ function wireframeBody(config: SVGExportConfig): string {
 }
 
 function filledGradientDefs(config: SVGExportConfig): string {
-  const bt = config.baseTransform
-  // clipPath uses userSpaceOnUse (default) — coordinates must be in screen space
-  // Apply the same transform chain as the layer group so the clip aligns
-  const clipPaths = config.steps.map((step, i) => {
-    const { scale: stepScale, offsetX, offsetY } = step.transform
-    const [cx, cy] = step.centroid
-
-    if (bt) {
-      const shapeCenterCanvasX = bt.translateX + cx * bt.scale
-      const shapeCenterCanvasY = bt.translateY + cy * bt.scale
-      const transform = [
-        `translate(${shapeCenterCanvasX + offsetX},${shapeCenterCanvasY + offsetY})`,
-        `scale(${stepScale})`,
-        `translate(${-shapeCenterCanvasX},${-shapeCenterCanvasY})`,
-        `translate(${bt.translateX},${bt.translateY})`,
-        `scale(${bt.scale})`,
-      ].join(' ')
-
-      return `<clipPath id="clip-${i}">
-      <path d="${step.path}" transform="${transform}"/>
-    </clipPath>`
-    }
-
-    return `<clipPath id="clip-${i}">
+  const clipPaths = config.steps.map((step, i) =>
+    `<clipPath id="clip-${i}">
       <path d="${step.path}"/>
     </clipPath>`
-  }).join('\n    ')
+  ).join('\n    ')
 
   let defs = clipPaths
   if (config.noise) {
@@ -121,46 +99,54 @@ function filledGradientDefs(config: SVGExportConfig): string {
 }
 
 function filledGradientBody(config: SVGExportConfig): string {
-  const bt = config.baseTransform ?? { translateX: 0, translateY: 0, scale: 1 }
-
+  const bt = config.baseTransform
   const [, , vw, vh] = config.viewBox
 
-  // Replicate the canvas renderer's exact transform sequence per layer:
-  // Canvas does (in order):
-  //   1. translate(shapeCenterCanvasX + offsetX, shapeCenterCanvasY + offsetY)
-  //   2. scale(stepScale)
-  //   3. translate(-shapeCenterCanvasX, -shapeCenterCanvasY)
-  //   4. translate(tx, ty)
-  //   5. scale(baseScale)
-  // Where shapeCenterCanvasX = tx + centroid.x * baseScale
+  // The canvas renderer's per-layer transform (inside the base translate+scale):
+  //   translate(shapeCenterCanvasX + offsetX, shapeCenterCanvasY + offsetY)
+  //   scale(stepScale)
+  //   translate(-shapeCenterCanvasX, -shapeCenterCanvasY)
   //
-  // SVG transform attribute applies right-to-left (same as canvas),
-  // so we write the same sequence as a single transform string.
+  // But shapeCenterCanvasX = tx + cx * baseScale, which is in screen space.
+  // Inside the SVG base-transform group we're already in shape space,
+  // so the per-layer transform simplifies to:
+  //   translate(cx + offsetX/baseScale, cy + offsetY/baseScale)
+  //   scale(stepScale)
+  //   translate(-cx, -cy)
+  //
+  // The offsets must be divided by baseScale because computeStepTransform
+  // returns pixel-space offsets, but we're working in shape-space coordinates.
+
+  const baseScale = bt?.scale ?? 1
 
   const layers = config.steps.map((step, i) => {
     const { scale: stepScale, offsetX, offsetY } = step.transform
     const [cx, cy] = step.centroid
 
-    // Canvas-space centroid position
-    const shapeCenterCanvasX = bt.translateX + cx * bt.scale
-    const shapeCenterCanvasY = bt.translateY + cy * bt.scale
+    // Convert pixel-space offsets to shape-space
+    const shapeOffsetX = offsetX / baseScale
+    const shapeOffsetY = offsetY / baseScale
 
-    // Exact 5-step transform matching canvas renderer
-    const transform = [
-      `translate(${shapeCenterCanvasX + offsetX},${shapeCenterCanvasY + offsetY})`,
-      `scale(${stepScale})`,
-      `translate(${-shapeCenterCanvasX},${-shapeCenterCanvasY})`,
-      `translate(${bt.translateX},${bt.translateY})`,
-      `scale(${bt.scale})`,
-    ].join(' ')
+    const tx = cx + shapeOffsetX
+    const ty = cy + shapeOffsetY
+
+    const needsTransform = stepScale !== 1 || shapeOffsetX !== 0 || shapeOffsetY !== 0
+    const stepTransform = needsTransform
+      ? ` transform="translate(${tx},${ty}) scale(${stepScale}) translate(${-cx},${-cy})"`
+      : ''
 
     const href = step.gradientImage ?? ''
 
-    return `<g clip-path="url(#clip-${i})" opacity="${step.opacity}" transform="${transform}">
+    return `<g clip-path="url(#clip-${i})" opacity="${step.opacity}"${stepTransform}>
         <image href="${href}" x="-50" y="-50" width="${vw + 100}" height="${vh + 100}"/>
       </g>`
   }).join('\n    ')
 
+  if (bt) {
+    return `<g transform="translate(${bt.translateX},${bt.translateY}) scale(${bt.scale})">
+    ${layers}
+    </g>`
+  }
   return layers
 }
 
