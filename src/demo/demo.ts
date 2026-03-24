@@ -748,10 +748,19 @@ function exportSVG() {
   const noiseTileSize = exportConfig.highRes ? 512 : 256
   const noiseImage = config.noise ? rasterizeNoiseTile(noiseTileSize, config.noiseOpacity) : undefined
 
+  // Compute viewBox with padding to contain all transformed shapes.
+  // Back layers scale up by scaleFrom and offset by spread — they can overflow the viewport.
+  const maxStepScale = Math.max(config.scaleFrom, config.scaleTo)
+  const maxOffset = 15 * config.spread
+  const shapeExtentW = vb[2] * baseScale * maxStepScale
+  const shapeExtentH = vb[3] * baseScale * maxStepScale
+  const padX = Math.max(0, (shapeExtentW - vb[2] * baseScale) / 2 + maxOffset + 20)
+  const padY = Math.max(0, (shapeExtentH - vb[3] * baseScale) / 2 + maxOffset + 20)
+
   const svgConfig: SVGExportConfig = {
-    width: screenW,
-    height: screenH,
-    viewBox: [0, 0, screenW, screenH],
+    width: screenW + padX * 2,
+    height: screenH + padY * 2,
+    viewBox: [-padX, -padY, screenW + padX * 2, screenH + padY * 2],
     background: exportConfig.transparentBg ? 'transparent' : config.background,
     variant: config.variant as any,
     noise: config.noise,
