@@ -46,3 +46,30 @@ export function rasterizeConicGradient(options: ConicGradientOptions, scaleFacto
 
   return canvas.toDataURL('image/jpeg', 0.9)
 }
+
+/**
+ * Rasterize a noise grain tile matching the canvas renderer's generateNoiseTexture.
+ * Random per-pixel grayscale at the given opacity — identical algorithm to canvas.
+ * Returns a base64 PNG data URL (PNG needed for alpha transparency).
+ */
+export function rasterizeNoiseTile(size: number, opacity: number): string {
+  const canvas = document.createElement('canvas')
+  canvas.width = size
+  canvas.height = size
+  const ctx = canvas.getContext('2d')!
+  const imageData = ctx.createImageData(size, size)
+  const data = imageData.data
+  const alpha = Math.round(opacity * 255)
+
+  for (let i = 0; i < size * size; i++) {
+    const val = Math.random() * 255
+    const idx = i * 4
+    data[idx] = val
+    data[idx + 1] = val
+    data[idx + 2] = val
+    data[idx + 3] = alpha
+  }
+
+  ctx.putImageData(imageData, 0, 0)
+  return canvas.toDataURL('image/png')
+}

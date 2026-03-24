@@ -67,17 +67,23 @@ describe('generateSVG — wireframe', () => {
     expect(svg).not.toContain('<rect')
   })
 
-  it('includes noise filter when enabled', () => {
-    const svg = generateSVG(makeWireframeConfig({ noise: true }))
-    expect(svg).toContain('<filter id="noise"')
-    expect(svg).toContain('feTurbulence')
-    expect(svg).toContain('filter="url(#noise)"')
+  it('includes rasterized noise pattern when enabled with noiseImage', () => {
+    const svg = generateSVG(makeWireframeConfig({ noise: true, noiseImage: 'data:image/png;base64,fakeNoise', noiseTileSize: 256 }))
+    expect(svg).toContain('<pattern id="noiseTile"')
+    expect(svg).toContain('href="data:image/png;base64,fakeNoise"')
+    expect(svg).toContain('clip-path="url(#noise-mask)"')
+    expect(svg).toContain('fill="url(#noiseTile)"')
   })
 
-  it('omits noise filter when disabled', () => {
+  it('omits noise when disabled', () => {
     const svg = generateSVG(makeWireframeConfig({ noise: false }))
-    expect(svg).not.toContain('<filter')
-    expect(svg).not.toContain('feTurbulence')
+    expect(svg).not.toContain('noiseTile')
+    expect(svg).not.toContain('noise-mask')
+  })
+
+  it('omits noise when enabled but no noiseImage provided', () => {
+    const svg = generateSVG(makeWireframeConfig({ noise: true }))
+    expect(svg).not.toContain('noiseTile')
   })
 
   it('includes stroke-width from step', () => {

@@ -4,7 +4,7 @@ import { shapeNames, getShape } from '../core/shapes'
 import { DEFAULT_NOISE_CONFIG, buildLinearGradientStops } from '../core/effects'
 import { generateSVG, type SVGExportConfig, type SVGExportStep } from '../core/svg-export'
 import { pathCentroid, computeStepTransform } from '../core/transforms'
-import { rasterizeConicGradient } from './gradient-rasterizer'
+import { rasterizeConicGradient, rasterizeNoiseTile } from './gradient-rasterizer'
 import { getMorphPoints, generateMorphSteps, smoothPath, type Point } from '../core/morph'
 import { displacePoints, displacePointsAudio, DEFAULT_VERTEX_ANIM, type VertexAnimConfig, type PulseState } from '../core/animate'
 import {
@@ -741,6 +741,10 @@ function exportSVG() {
     }
   })
 
+  // Rasterize noise tile matching the canvas renderer's exact algorithm
+  const noiseTileSize = 256
+  const noiseImage = config.noise ? rasterizeNoiseTile(noiseTileSize, config.noiseOpacity) : undefined
+
   const svgConfig: SVGExportConfig = {
     width: screenW,
     height: screenH,
@@ -752,6 +756,8 @@ function exportSVG() {
     colours,
     steps,
     baseTransform: { translateX: tx, translateY: ty, scale: baseScale },
+    noiseImage,
+    noiseTileSize,
     shapeViewBox: vb,
   }
 

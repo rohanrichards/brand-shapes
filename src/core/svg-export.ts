@@ -34,23 +34,28 @@ export interface SVGExportConfig {
   baseTransform?: { translateX: number; translateY: number; scale: number }
   /** Original shape viewBox (e.g., [0,0,164,104]) — used for image sizing inside base transform */
   shapeViewBox?: [number, number, number, number]
+  /** Base64 PNG of noise grain tile (rasterized to match canvas renderer) */
+  noiseImage?: string
+  /** Size of the noise tile in pixels */
+  noiseTileSize?: number
 }
 
-function noiseFilterDef(opacity: number): string {
-  // Fine film grain, masked to shapes only:
-  // - High baseFrequency (1.5) = fine grain like per-pixel noise, not blobby Perlin
-  // - numOctaves 4 = extra detail at small scale
-  // - Desaturate to grayscale
-  // - Reduce opacity via feColorMatrix so it's subtle (matching canvas 8% opacity)
-  // - feComposite 'in' clips noise to source alpha (source-atop equivalent)
-  // - Soft-light blend is gentler than overlay — no harsh white specks
-  return `<filter id="noise" x="0%" y="0%" width="100%" height="100%" color-interpolation-filters="sRGB">
-      <feTurbulence type="fractalNoise" baseFrequency="1.5" numOctaves="4" seed="0" result="noise"/>
-      <feColorMatrix type="saturate" values="0" in="noise" result="grayNoise"/>
-      <feColorMatrix type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 ${opacity} 0" in="grayNoise" result="fadedNoise"/>
-      <feComposite operator="in" in="fadedNoise" in2="SourceGraphic" result="maskedNoise"/>
-      <feBlend in="SourceGraphic" in2="maskedNoise" mode="soft-light"/>
-    </filter>`
+/**
+ * Generate noise defs: a repeating pattern tile + a mask combining all shape paths.
+ * This matches the canvas renderer's source-atop noise compositing exactly.
+ */
+function noiseDefs(config: SVGExportConfig): string {
+  const tileSize = config.noiseTileSize ?? 256
+  const bt = config.baseTransform
+  const baseScale = bt?.scale ?? 1
+  // Pattern tile size in shape-space units (since it's inside the base transform group)
+  const tileSizeShape = tileSize / baseScale
+
+  const patternDef = `<pattern id="noiseTile" x="0" y="0" width="${tileSizeShape}" height="${tileSizeShape}" patternUnits="userSpaceOnUse">
+      <image href="${config.noiseImage ?? ''}" width="${tileSizeShape}" height="${tileSizeShape}"/>
+    </pattern>`
+
+  return patternDef
 }
 
 function wireframeDefs(config: SVGExportConfig): string {
@@ -63,11 +68,23 @@ function wireframeDefs(config: SVGExportConfig): string {
       ${stopElements}
     </linearGradient>`
 
-  if (config.noise) {
-    defs += `\n    ${noiseFilterDef(config.noiseOpacity)}`
+  if (config.noise && config.noiseImage) {
+    defs += `\n    ${noiseDefs(config)}`
+    // Combined clip of all shape paths for the noise overlay
+    const allPaths = config.steps.map(s => `<path d="${s.path}"/>`).join('\n        ')
+    defs += `\n    <clipPath id="noise-mask">
+        ${allPaths}
+    </clipPath>`
   }
 
   return defs
+}
+
+function noiseOverlay(config: SVGExportConfig): string {
+  if (!config.noise || !config.noiseImage) return ''
+  const svb = config.shapeViewBox ?? config.viewBox
+  const [, , vw, vh] = svb
+  return `\n    <rect x="-50" y="-50" width="${vw + 100}" height="${vh + 100}" fill="url(#noiseTile)" clip-path="url(#noise-mask)"/>`
 }
 
 function wireframeBody(config: SVGExportConfig): string {
@@ -77,12 +94,14 @@ function wireframeBody(config: SVGExportConfig): string {
     return `<path d="${step.path}" stroke="url(#wireStroke)" stroke-width="${sw}" fill="none" opacity="${step.opacity}"/>`
   }).join('\n      ')
 
+  const noise = noiseOverlay(config)
+
   if (bt) {
     return `<g transform="translate(${bt.translateX},${bt.translateY}) scale(${bt.scale})">
-      ${paths}
+      ${paths}${noise}
     </g>`
   }
-  return paths
+  return paths + noise
 }
 
 function filledGradientDefs(config: SVGExportConfig): string {
@@ -93,8 +112,14 @@ function filledGradientDefs(config: SVGExportConfig): string {
   ).join('\n    ')
 
   let defs = clipPaths
-  if (config.noise) {
-    defs += `\n    ${noiseFilterDef(config.noiseOpacity)}`
+
+  if (config.noise && config.noiseImage) {
+    defs += `\n    ${noiseDefs(config)}`
+    // Combined clip of all shape paths for noise overlay
+    const allPaths = config.steps.map(s => `<path d="${s.path}"/>`).join('\n        ')
+    defs += `\n    <clipPath id="noise-mask">
+        ${allPaths}
+    </clipPath>`
   }
 
   return defs
@@ -146,12 +171,14 @@ function filledGradientBody(config: SVGExportConfig): string {
       </g>`
   }).join('\n    ')
 
+  const noise = noiseOverlay(config)
+
   if (bt) {
     return `<g transform="translate(${bt.translateX},${bt.translateY}) scale(${bt.scale})">
-    ${layers}
+    ${layers}${noise}
     </g>`
   }
-  return layers
+  return layers + noise
 }
 
 export function generateSVG(config: SVGExportConfig): string {
@@ -177,13 +204,11 @@ export function generateSVG(config: SVGExportConfig): string {
     ? `\n  <rect width="100%" height="100%" fill="${background}"/>`
     : ''
 
-  const filterAttr = config.noise ? ' filter="url(#noise)"' : ''
-
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="${vx} ${vy} ${vw} ${vh}">
   <defs>
     ${defs}
   </defs>${bgRect}
-  <g${filterAttr}>
+  <g>
     ${body}
   </g>
 </svg>`
