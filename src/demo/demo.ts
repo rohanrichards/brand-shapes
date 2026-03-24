@@ -5,7 +5,7 @@ import { DEFAULT_NOISE_CONFIG, buildLinearGradientStops } from '../core/effects'
 import { generateSVG, type SVGExportConfig, type SVGExportStep } from '../core/svg-export'
 import { pathCentroid, computeStepTransform } from '../core/transforms'
 import { rasterizeConicGradient } from './gradient-rasterizer'
-import { getMorphPoints, smoothPath, type Point } from '../core/morph'
+import { getMorphPoints, generateMorphSteps, smoothPath, type Point } from '../core/morph'
 import { displacePoints, displacePointsAudio, DEFAULT_VERTEX_ANIM, type VertexAnimConfig, type PulseState } from '../core/animate'
 import {
   createBandBinRanges, extractBandLevels, normalizeLevels, smoothLevels,
@@ -676,13 +676,10 @@ function exportSVG() {
   const toShape = getShape(config.to as any)
   const totalSteps = config.steps
 
-  // Get current paths
-  const paths: string[] = []
-  for (let i = 0; i < totalSteps; i++) {
-    const t = totalSteps === 1 ? 0 : i / (totalSteps - 1)
-    const pts = getMorphPoints(fromShape.path, toShape.path, t)
-    paths.push(smoothPath(pts))
-  }
+  // Use generateMorphSteps — same pipeline as the canvas renderer
+  // (flubber interpolate → uniform resample → smooth). NOT getMorphPoints which
+  // is for animation vertex displacement and produces different paths.
+  const { steps: paths } = generateMorphSteps(fromShape.path, toShape.path, totalSteps)
 
   const colours = {
     current: config.colourFrom,
@@ -737,15 +734,26 @@ function exportSVG() {
     }
   })
 
+  // Use screen-space viewBox (matching canvas coordinates) with the same
+  // scale + centering transform that the canvas renderer applies
+  const screenW = canvas.clientWidth
+  const screenH = canvas.clientHeight
+  const scaleX2 = screenW / vb[2]
+  const scaleY2 = screenH / vb[3]
+  const baseScale = Math.min(scaleX2, scaleY2) * 0.8
+  const tx = (screenW - vb[2] * baseScale) / 2
+  const ty = (screenH - vb[3] * baseScale) / 2
+
   const svgConfig: SVGExportConfig = {
-    width: canvas.clientWidth,
-    height: canvas.clientHeight,
-    viewBox: vb,
+    width: screenW,
+    height: screenH,
+    viewBox: [0, 0, screenW, screenH],
     background: exportConfig.transparentBg ? 'transparent' : config.background,
     variant: config.variant as any,
     noise: config.noise,
     colours,
     steps,
+    baseTransform: { translateX: tx, translateY: ty, scale: baseScale },
   }
 
   const svgString = generateSVG(svgConfig)

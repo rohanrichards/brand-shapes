@@ -29,13 +29,21 @@ export interface SVGExportConfig {
   noise: boolean
   colours: SVGExportColours
   steps: SVGExportStep[]
+  /** Base transform matching the canvas renderer's viewBox→screen mapping */
+  baseTransform?: { translateX: number; translateY: number; scale: number }
 }
 
 function noiseFilterDef(): string {
-  return `<filter id="noise">
+  // Noise is masked to only where shapes exist (equivalent to canvas source-atop):
+  // 1. Generate fractal noise
+  // 2. Desaturate to grayscale
+  // 3. Composite noise with source using 'in' operator (clips noise to source alpha)
+  // 4. Blend the clipped noise on top of the source
+  return `<filter id="noise" x="0%" y="0%" width="100%" height="100%">
       <feTurbulence type="fractalNoise" baseFrequency="0.65" numOctaves="3" result="noise"/>
       <feColorMatrix type="saturate" values="0" in="noise" result="grayNoise"/>
-      <feBlend in="SourceGraphic" in2="grayNoise" mode="overlay"/>
+      <feComposite operator="in" in="grayNoise" in2="SourceGraphic" result="maskedNoise"/>
+      <feBlend in="SourceGraphic" in2="maskedNoise" mode="overlay"/>
     </filter>`
 }
 
@@ -57,11 +65,17 @@ function wireframeDefs(config: SVGExportConfig): string {
 }
 
 function wireframeBody(config: SVGExportConfig): string {
+  const bt = config.baseTransform
   const paths = config.steps.map(step => {
     const sw = step.strokeWidth ?? 1.5
     return `<path d="${step.path}" stroke="url(#wireStroke)" stroke-width="${sw}" fill="none" opacity="${step.opacity}"/>`
-  }).join('\n    ')
+  }).join('\n      ')
 
+  if (bt) {
+    return `<g transform="translate(${bt.translateX},${bt.translateY}) scale(${bt.scale})">
+      ${paths}
+    </g>`
+  }
   return paths
 }
 
@@ -81,24 +95,36 @@ function filledGradientDefs(config: SVGExportConfig): string {
 }
 
 function filledGradientBody(config: SVGExportConfig): string {
-  const [, , vw, vh] = config.viewBox
+  const bt = config.baseTransform
+  // Image dimensions should cover the shape viewBox area
+  // We need the original shape viewBox width/height for the image sizing
+  // The gradient image covers the shape coordinate space
+  const imgW = bt ? config.width / bt.scale : config.viewBox[2]
+  const imgH = bt ? config.height / bt.scale : config.viewBox[3]
 
-  return config.steps.map((step, i) => {
+  const layers = config.steps.map((step, i) => {
     const { scale, offsetX, offsetY } = step.transform
     const [cx, cy] = step.centroid
     const tx = cx + offsetX
     const ty = cy + offsetY
 
-    const transform = scale !== 1 || offsetX !== 0 || offsetY !== 0
+    const stepTransform = scale !== 1 || offsetX !== 0 || offsetY !== 0
       ? ` transform="translate(${tx},${ty}) scale(${scale}) translate(${-cx},${-cy})"`
       : ''
 
     const href = step.gradientImage ?? ''
 
-    return `<g clip-path="url(#clip-${i})" opacity="${step.opacity}"${transform}>
-      <image href="${href}" width="${vw}" height="${vh}"/>
+    return `<g clip-path="url(#clip-${i})" opacity="${step.opacity}"${stepTransform}>
+        <image href="${href}" x="-50" y="-50" width="${imgW + 100}" height="${imgH + 100}"/>
+      </g>`
+  }).join('\n      ')
+
+  if (bt) {
+    return `<g transform="translate(${bt.translateX},${bt.translateY}) scale(${bt.scale})">
+      ${layers}
     </g>`
-  }).join('\n    ')
+  }
+  return layers
 }
 
 export function generateSVG(config: SVGExportConfig): string {
