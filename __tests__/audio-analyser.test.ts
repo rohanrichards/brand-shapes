@@ -1,6 +1,6 @@
 // __tests__/audio-analyser.test.ts
 import { describe, it, expect } from 'vitest'
-import { BANDS, createBandBinRanges, extractBandLevels, normalizeLevels, createNormalizationHistory, smoothLevels, type BandConfig, type BandBinRange, type NormalizationHistory } from '../src/core/audio-analyser'
+import { BANDS, createBandBinRanges, extractBandLevels, normalizeLevels, createNormalizationHistory, smoothLevels, interpolateToLayers, type BandConfig, type BandBinRange, type NormalizationHistory } from '../src/core/audio-analyser'
 
 describe('BANDS', () => {
   it('has exactly 7 bands', () => {
@@ -171,5 +171,49 @@ describe('smoothLevels', () => {
     const falling = smoothLevels([0], [1], 5, 150, dt)
     // Rising should move faster toward target than falling
     expect(rising[0]).toBeGreaterThan(1 - falling[0])
+  })
+})
+
+describe('interpolateToLayers', () => {
+  it('returns exactly layerCount values', () => {
+    const bands = [1, 0.8, 0.6, 0.4, 0.3, 0.2, 0.1]
+    expect(interpolateToLayers(bands, 5)).toHaveLength(5)
+    expect(interpolateToLayers(bands, 10)).toHaveLength(10)
+    expect(interpolateToLayers(bands, 15)).toHaveLength(15)
+  })
+
+  it('with 7 layers, returns the 7 band values directly', () => {
+    const bands = [1, 0.8, 0.6, 0.4, 0.3, 0.2, 0.1]
+    const result = interpolateToLayers(bands, 7)
+    for (let i = 0; i < 7; i++) {
+      expect(result[i]).toBeCloseTo(bands[i])
+    }
+  })
+
+  it('first layer matches first band (sub-bass)', () => {
+    const bands = [0.9, 0.5, 0.3, 0.4, 0.2, 0.1, 0.05]
+    const result = interpolateToLayers(bands, 12)
+    expect(result[0]).toBeCloseTo(0.9)
+  })
+
+  it('last layer matches last band (brilliance)', () => {
+    const bands = [0.9, 0.5, 0.3, 0.4, 0.2, 0.1, 0.05]
+    const result = interpolateToLayers(bands, 12)
+    expect(result[11]).toBeCloseTo(0.05)
+  })
+
+  it('mid layer interpolates between adjacent bands', () => {
+    const bands = [1, 0, 0, 0, 0, 0, 0]
+    const result = interpolateToLayers(bands, 13)
+    // Layer 1 should be between band 0 (1.0) and band 1 (0.0)
+    expect(result[1]).toBeGreaterThan(0)
+    expect(result[1]).toBeLessThan(1)
+  })
+
+  it('returns single value for 1 layer (average of all bands)', () => {
+    const bands = [1, 1, 1, 1, 1, 1, 1]
+    const result = interpolateToLayers(bands, 1)
+    expect(result).toHaveLength(1)
+    expect(result[0]).toBeCloseTo(1)
   })
 })

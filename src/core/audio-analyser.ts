@@ -114,3 +114,26 @@ export function smoothLevels(
     return prev + (val - prev) * coeff
   })
 }
+
+/**
+ * Interpolate 7 band levels to N layer intensities.
+ * The 7 bands are anchor points evenly spaced across the layer range.
+ * Layers between anchors get linearly interpolated intensity.
+ */
+export function interpolateToLayers(bandLevels: number[], layerCount: number): number[] {
+  if (layerCount === 1) {
+    // Single layer: average all bands
+    return [bandLevels.reduce((a, b) => a + b, 0) / bandLevels.length]
+  }
+  const bandCount = bandLevels.length
+  const result: number[] = []
+  for (let i = 0; i < layerCount; i++) {
+    // Map layer index to position in band space (0 to bandCount-1)
+    const bandPos = (i / (layerCount - 1)) * (bandCount - 1)
+    const lower = Math.floor(bandPos)
+    const upper = Math.min(lower + 1, bandCount - 1)
+    const frac = bandPos - lower
+    result.push(bandLevels[lower] * (1 - frac) + bandLevels[upper] * frac)
+  }
+  return result
+}
