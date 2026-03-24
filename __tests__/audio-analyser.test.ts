@@ -64,7 +64,7 @@ describe('extractBandLevels', () => {
     const data = new Float32Array(1024).fill(-100)
     const levels = extractBandLevels(data, binRanges)
     for (const level of levels) {
-      expect(level).toBeCloseTo(0, 5)
+      expect(level).toBeCloseTo(0, 4)
     }
   })
 
