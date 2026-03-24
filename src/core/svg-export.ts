@@ -115,11 +115,6 @@ function filledGradientDefs(config: SVGExportConfig): string {
 
   if (config.noise && config.noiseImage) {
     defs += `\n    ${noiseDefs(config)}`
-    // Combined clip of all shape paths for noise overlay
-    const allPaths = config.steps.map(s => `<path d="${s.path}"/>`).join('\n        ')
-    defs += `\n    <clipPath id="noise-mask">
-        ${allPaths}
-    </clipPath>`
   }
 
   return defs
@@ -165,20 +160,22 @@ function filledGradientBody(config: SVGExportConfig): string {
       : ''
 
     const href = step.gradientImage ?? ''
+    const hasNoise = config.noise && config.noiseImage
+    const noiseRect = hasNoise
+      ? `\n        <rect x="-50" y="-50" width="${vw + 100}" height="${vh + 100}" fill="url(#noiseTile)"/>`
+      : ''
 
     return `<g clip-path="url(#clip-${i})" opacity="${step.opacity}"${stepTransform}>
-        <image href="${href}" x="-50" y="-50" width="${vw + 100}" height="${vh + 100}"/>
+        <image href="${href}" x="-50" y="-50" width="${vw + 100}" height="${vh + 100}"/>${noiseRect}
       </g>`
   }).join('\n    ')
 
-  const noise = noiseOverlay(config)
-
   if (bt) {
     return `<g transform="translate(${bt.translateX},${bt.translateY}) scale(${bt.scale})">
-    ${layers}${noise}
+    ${layers}
     </g>`
   }
-  return layers + noise
+  return layers
 }
 
 export function generateSVG(config: SVGExportConfig): string {
