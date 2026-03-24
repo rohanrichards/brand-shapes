@@ -139,13 +139,13 @@ export function displacePointsAudio(
   const center = centroid(points)
 
   // Audio amplitude: max displacement in shape units
-  const maxDisplacement = 8
+  const maxDisplacement = 20
 
-  // Centroid modulates noise frequency: 0.04 (smooth) to 0.2 (spiky)
-  const noiseFreq = 0.04 + spectralCentroid * 0.16
+  // Centroid modulates noise frequency: 0.06 (smooth) to 0.5 (very spiky)
+  const noiseFreq = 0.06 + spectralCentroid * 0.44
   // Base noise amplitude (subtle organic motion)
-  const noiseAmp = 1.0
-  const noiseSpeed = 0.3
+  const noiseAmp = 1.5
+  const noiseSpeed = 0.4
 
   return points.map((p, i) => {
     const normalizedIndex = i / n
@@ -165,7 +165,7 @@ export function displacePointsAudio(
     )
 
     // Audio displacement: radial, noise-modulated
-    const audioDisp = intensity * maxDisplacement * (1 + vertexNoise * spectralCentroid)
+    const audioDisp = intensity * maxDisplacement * (1 + vertexNoise * spectralCentroid * 2)
 
     // Base organic noise (always present, independent of audio)
     const baseNoiseX = noise2d(normalizedIndex * n * 0.06 + 200, time * noiseSpeed + layerIndex * 5) * noiseAmp
