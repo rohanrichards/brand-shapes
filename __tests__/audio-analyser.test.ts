@@ -1,6 +1,6 @@
 // __tests__/audio-analyser.test.ts
 import { describe, it, expect } from 'vitest'
-import { BANDS, createBandBinRanges, extractBandLevels, normalizeLevels, createNormalizationHistory, type BandConfig, type BandBinRange, type NormalizationHistory } from '../src/core/audio-analyser'
+import { BANDS, createBandBinRanges, extractBandLevels, normalizeLevels, createNormalizationHistory, smoothLevels, type BandConfig, type BandBinRange, type NormalizationHistory } from '../src/core/audio-analyser'
 
 describe('BANDS', () => {
   it('has exactly 7 bands', () => {
@@ -137,5 +137,39 @@ describe('normalizeLevels', () => {
     const levels = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7]
     const result = normalizeLevels(levels, history)
     expect(result).toHaveLength(7)
+  })
+})
+
+describe('smoothLevels', () => {
+  const dt = 1 / 60 // 60fps
+
+  it('fast attack: reaches 90% of target within 3 frames at 5ms attack', () => {
+    let prev = [0]
+    const target = [1]
+    for (let i = 0; i < 3; i++) {
+      prev = smoothLevels(target, prev, 5, 150, dt)
+    }
+    expect(prev[0]).toBeGreaterThan(0.9)
+  })
+
+  it('slow decay: retains >50% after 5 frames at 150ms decay', () => {
+    let prev = [1]
+    const target = [0]
+    for (let i = 0; i < 5; i++) {
+      prev = smoothLevels(target, prev, 5, 150, dt)
+    }
+    expect(prev[0]).toBeGreaterThan(0.5)
+  })
+
+  it('returns same length as input', () => {
+    const result = smoothLevels([1, 2, 3, 4, 5, 6, 7], [0, 0, 0, 0, 0, 0, 0], 5, 150, dt)
+    expect(result).toHaveLength(7)
+  })
+
+  it('uses attack coefficient when current > previous (rising)', () => {
+    const rising = smoothLevels([1], [0], 5, 150, dt)
+    const falling = smoothLevels([0], [1], 5, 150, dt)
+    // Rising should move faster toward target than falling
+    expect(rising[0]).toBeGreaterThan(1 - falling[0])
   })
 })

@@ -94,3 +94,23 @@ export function normalizeLevels(levels: number[], history: NormalizationHistory)
     return Math.max(0, Math.min(1, (level - history.min[i]) / range))
   })
 }
+
+/**
+ * Asymmetric exponential smoothing. Fast attack for beats, slow decay for smooth falloff.
+ * attack/decay in milliseconds. dt in seconds (time since last frame).
+ */
+export function smoothLevels(
+  current: number[],
+  previous: number[],
+  attack: number,
+  decay: number,
+  dt: number,
+): number[] {
+  const frameRate = 1 / dt
+  return current.map((val, i) => {
+    const prev = previous[i] ?? 0
+    const ms = val > prev ? attack : decay
+    const coeff = 1 - Math.exp(-1000 / (ms * frameRate))
+    return prev + (val - prev) * coeff
+  })
+}
