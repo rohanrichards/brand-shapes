@@ -637,6 +637,7 @@ updateAnimFolders()
 
 const exportConfig = {
   transparentBg: false,
+  highRes: false,
 }
 
 function exportPNG() {
@@ -695,8 +696,9 @@ function exportSVG() {
   const ty = (screenH - vb[3] * baseScale) / 2
 
   // Gradient scale factor: baseScale ensures 1:1 screen pixel coverage,
-  // multiply by DPR for retina crispness
-  const gradientScaleFactor = baseScale * (window.devicePixelRatio || 1)
+  // multiply by DPR for retina crispness. High-res mode doubles for print quality.
+  const resMultiplier = exportConfig.highRes ? 2 : 1
+  const gradientScaleFactor = baseScale * (window.devicePixelRatio || 1) * resMultiplier
 
   const steps: SVGExportStep[] = paths.map((path, i) => {
     const { scale, offsetX, offsetY } = computeStepTransform(
@@ -742,7 +744,8 @@ function exportSVG() {
   })
 
   // Rasterize noise tile matching the canvas renderer's exact algorithm
-  const noiseTileSize = 256
+  // High-res mode uses larger tile for print quality
+  const noiseTileSize = exportConfig.highRes ? 512 : 256
   const noiseImage = config.noise ? rasterizeNoiseTile(noiseTileSize, config.noiseOpacity) : undefined
 
   const svgConfig: SVGExportConfig = {
@@ -773,5 +776,6 @@ function exportSVG() {
 
 const exportFolder = gui.addFolder('Export')
 exportFolder.add(exportConfig, 'transparentBg').name('Transparent BG')
+exportFolder.add(exportConfig, 'highRes').name('High Res SVG')
 exportFolder.add({ exportPNG }, 'exportPNG').name('Export PNG')
 exportFolder.add({ exportSVG }, 'exportSVG').name('Export SVG')
