@@ -201,7 +201,7 @@ export function generateSVG(config: SVGExportConfig): string {
     ? `\n  <rect width="100%" height="100%" fill="${background}"/>`
     : ''
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="${vx} ${vy} ${vw} ${vh}" style="overflow:visible">
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="${vx} ${vy} ${vw} ${vh}">
   <defs>
     ${defs}
   </defs>${bgRect}
