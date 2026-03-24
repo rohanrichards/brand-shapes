@@ -3,7 +3,15 @@ import { render, type RenderConfig } from '../renderer/canvas-renderer'
 import { shapeNames, getShape } from '../core/shapes'
 import { DEFAULT_NOISE_CONFIG } from '../core/effects'
 import { getMorphPoints, smoothPath, type Point } from '../core/morph'
-import { displacePoints, DEFAULT_VERTEX_ANIM, type VertexAnimConfig, type PulseState } from '../core/animate'
+import { displacePoints, displacePointsAudio, DEFAULT_VERTEX_ANIM, type VertexAnimConfig, type PulseState } from '../core/animate'
+import {
+  createBandBinRanges, extractBandLevels, normalizeLevels, smoothLevels,
+  interpolateToLayers, createNormalizationHistory,
+} from '../core/audio-analyser'
+import {
+  setupMicInput, setupSystemAudioInput, setupFileInput, setupMeyda,
+  type AudioSourceHandle, type MeydaHandle,
+} from './audio-source'
 import { presets, presetNames } from './presets'
 import { allColourHexes, allColourOptions } from '../core/colours'
 
@@ -25,7 +33,7 @@ const config = {
   scaleFrom: 1.15,
   scaleTo: 0.95,
   // Animation
-  animMode: 'none' as 'none' | 'trail' | 'breathe',
+  animMode: 'none' as 'none' | 'trail' | 'breathe' | 'audio',
   duration: 2000,
   // Vertex animation
   breathingAmplitude: DEFAULT_VERTEX_ANIM.breathingAmplitude,
@@ -37,6 +45,9 @@ const config = {
   pulseInterval: DEFAULT_VERTEX_ANIM.pulseInterval,
   pulseSharpness: DEFAULT_VERTEX_ANIM.pulseSharpness,
   pulseCascadeDelay: DEFAULT_VERTEX_ANIM.pulseCascadeDelay,
+  // Audio
+  audioSource: 'none' as 'none' | 'mic' | 'system' | 'file',
+  audioSensitivity: 1.0,
   preset: 'Organic Flow',
 }
 
@@ -220,6 +231,89 @@ let cursorState: { x: number; y: number } | null = null
 let pulseState: PulseState | null = null
 let breatheStartTime = 0
 
+// --- Audio state ---
+let audioCtx: AudioContext | null = null
+let audioSourceHandle: AudioSourceHandle | null = null
+let meydaHandle: MeydaHandle | null = null
+let prevLayerIntensities: number[] = []
+let normHistory = createNormalizationHistory()
+let frequencyData: Float32Array<ArrayBuffer> | null = null
+let audioSourceController: ReturnType<typeof GUI.prototype.add> | null = null
+
+async function switchAudioSource(source: string) {
+  // Clean up previous source
+  if (audioSourceHandle) {
+    audioSourceHandle.cleanup()
+    audioSourceHandle = null
+  }
+  if (meydaHandle) {
+    meydaHandle.cleanup()
+    meydaHandle = null
+  }
+
+  if (source === 'none') return
+
+  // Create AudioContext lazily
+  if (!audioCtx) {
+    audioCtx = new AudioContext()
+  }
+  await audioCtx.resume()
+
+  try {
+    switch (source) {
+      case 'mic':
+        audioSourceHandle = await setupMicInput(audioCtx)
+        break
+      case 'system':
+        audioSourceHandle = await setupSystemAudioInput(audioCtx)
+        break
+      case 'file':
+        // File handled via file picker — do nothing here
+        return
+    }
+    if (audioSourceHandle) {
+      meydaHandle = setupMeyda(audioCtx, audioSourceHandle.sourceNode)
+    }
+  } catch (err) {
+    console.warn('Audio source failed:', err)
+    config.audioSource = 'none'
+    if (audioSourceController) {
+      audioSourceController.setValue('none')
+      audioSourceController.updateDisplay()
+    }
+  }
+}
+
+function handleFileSelection() {
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.accept = 'audio/*'
+  input.addEventListener('cancel', () => {
+    config.audioSource = 'none'
+    if (audioSourceController) {
+      audioSourceController.setValue('none')
+      audioSourceController.updateDisplay()
+    }
+  })
+  input.onchange = async () => {
+    const file = input.files?.[0]
+    if (!file) return
+    if (audioSourceHandle) {
+      audioSourceHandle.cleanup()
+      audioSourceHandle = null
+    }
+    if (meydaHandle) {
+      meydaHandle.cleanup()
+      meydaHandle = null
+    }
+    if (!audioCtx) audioCtx = new AudioContext()
+    await audioCtx.resume()
+    audioSourceHandle = setupFileInput(audioCtx, file)
+    meydaHandle = setupMeyda(audioCtx, audioSourceHandle.sourceNode)
+  }
+  input.click()
+}
+
 // Track cursor in shape-local coordinates
 // The renderer transforms: translate(tx, ty) then scale(scaleFactor)
 // So shape-local = (canvasPos - translate) / scaleFactor
@@ -301,13 +395,92 @@ function startBreatheAnimation() {
   tick(performance.now())
 }
 
+// --- Audio animation ---
+
+function startAudioAnimation() {
+  stopAnimation()
+
+  const fromShape = getShape(config.from as any)
+  const toShape = getShape(config.to as any)
+  const totalSteps = config.steps
+
+  const basePointSets: Point[][] = []
+  for (let i = 0; i < totalSteps; i++) {
+    const t = totalSteps === 1 ? 0 : i / (totalSteps - 1)
+    basePointSets.push(getMorphPoints(fromShape.path, toShape.path, t))
+  }
+
+  const binCount = audioSourceHandle?.analyser.frequencyBinCount ?? 1024
+  const sampleRate = audioCtx?.sampleRate ?? 44100
+  const binRanges = createBandBinRanges(binCount, sampleRate)
+  frequencyData = new Float32Array(binCount)
+  prevLayerIntensities = new Array(totalSteps).fill(0)
+  normHistory = createNormalizationHistory()
+
+  let lastTime = performance.now()
+
+  function tick(now: number) {
+    const dt = Math.min((now - lastTime) / 1000, 0.05) // Cap at ~20fps to protect smoothing math
+    lastTime = now
+
+    let layerIntensities = new Array(totalSteps).fill(0)
+    let centroid = 0.5
+
+    if (audioSourceHandle && audioCtx?.state === 'running' && !document.hidden && frequencyData) {
+      audioSourceHandle.analyser.getFloatFrequencyData(frequencyData)
+      const bandLevels = extractBandLevels(frequencyData, binRanges)
+      const normalized = normalizeLevels(bandLevels, normHistory)
+      const interpolated = interpolateToLayers(normalized, totalSteps)
+      const smoothed = smoothLevels(interpolated, prevLayerIntensities, 5, 150, dt)
+      prevLayerIntensities = smoothed // Store unscaled for next frame's smoothing
+
+      if (meydaHandle) {
+        const features = meydaHandle.getFeatures()
+        centroid = features.centroid
+        // Scale intensities by RMS and sensitivity (only for displacement, not stored)
+        const rmsScale = features.rms * config.audioSensitivity
+        layerIntensities = smoothed.map(v => v * rmsScale)
+      } else {
+        layerIntensities = smoothed
+      }
+    } else {
+      prevLayerIntensities = layerIntensities
+    }
+
+    const time = now / 1000
+
+    const displacedLayers: Point[][] = []
+    const indices: number[] = []
+    for (let i = 0; i < totalSteps; i++) {
+      displacedLayers.push(displacePointsAudio(
+        basePointSets[i], time, layerIntensities[i], centroid, i,
+      ))
+      indices.push(i)
+    }
+
+    renderLayerPoints(displacedLayers, indices)
+
+    animId = requestAnimationFrame(tick)
+  }
+
+  tick(performance.now())
+}
+
 // --- Mode switching ---
 
 function startCurrentMode() {
   stopAnimation()
+  // Clean up audio resources when switching away from audio mode
+  if (config.animMode !== 'audio' && audioCtx) {
+    if (audioSourceHandle) { audioSourceHandle.cleanup(); audioSourceHandle = null }
+    if (meydaHandle) { meydaHandle.cleanup(); meydaHandle = null }
+    audioCtx.close()
+    audioCtx = null
+  }
   switch (config.animMode) {
     case 'trail': startTrailAnimation(); break
     case 'breathe': startBreatheAnimation(); break
+    case 'audio': startAudioAnimation(); break
     default: renderStatic(); break
   }
 }
@@ -322,6 +495,13 @@ function handleResize() {
 
 window.addEventListener('resize', handleResize)
 handleResize()
+
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && config.animMode === 'audio') {
+    // Reset smoothing state to prevent stale data burst
+    prevLayerIntensities = new Array(config.steps).fill(0)
+  }
+})
 
 // --- lil-gui ---
 
@@ -406,7 +586,7 @@ addLockToggle(layoutFolder.add(config, 'scaleFrom', 0.5, 2.0, 0.05).name('Scale 
 addLockToggle(layoutFolder.add(config, 'scaleTo', 0.5, 2.0, 0.05).name('Scale To').onChange(onConfigChange), 'scaleTo')
 
 const animFolder = gui.addFolder('Animation')
-animFolder.add(config, 'animMode', ['none', 'trail', 'breathe']).name('Mode').onChange(() => {
+animFolder.add(config, 'animMode', ['none', 'trail', 'breathe', 'audio']).name('Mode').onChange(() => {
   updateAnimFolders()
   onConfigChange()
 })
@@ -428,10 +608,26 @@ const cursorParallaxFolder = animFolder.addFolder('Cursor Parallax')
 cursorParallaxFolder.add(config, 'cursorParallaxEnabled').name('Enabled').onChange(onConfigChange)
 cursorParallaxFolder.add(config, 'cursorParallaxIntensity', 0, 0.15, 0.005).name('Intensity')
 
+const audioFolder = animFolder.addFolder('Audio')
+audioSourceController = audioFolder.add(config, 'audioSource', {
+  'None': 'none',
+  'Microphone': 'mic',
+  'System Audio': 'system',
+  'File': 'file',
+}).name('Source').onChange((source: string) => {
+  if (source === 'file') {
+    handleFileSelection()
+  } else {
+    switchAudioSource(source)
+  }
+})
+audioFolder.add(config, 'audioSensitivity', 0.1, 5.0, 0.1).name('Sensitivity')
+
 function updateAnimFolders() {
   const mode = config.animMode
   mode === 'trail' ? trailFolder.show() : trailFolder.hide()
   mode === 'breathe' ? breatheFolder.show() : breatheFolder.hide()
+  mode === 'audio' ? audioFolder.show() : audioFolder.hide()
 }
 
 updateAnimFolders()
