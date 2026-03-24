@@ -1,7 +1,10 @@
 import GUI from 'lil-gui'
 import { render, type RenderConfig } from '../renderer/canvas-renderer'
 import { shapeNames, getShape } from '../core/shapes'
-import { DEFAULT_NOISE_CONFIG } from '../core/effects'
+import { DEFAULT_NOISE_CONFIG, buildLinearGradientStops } from '../core/effects'
+import { generateSVG, type SVGExportConfig, type SVGExportStep } from '../core/svg-export'
+import { pathCentroid, computeStepTransform } from '../core/transforms'
+import { rasterizeConicGradient } from './gradient-rasterizer'
 import { getMorphPoints, smoothPath, type Point } from '../core/morph'
 import { displacePoints, displacePointsAudio, DEFAULT_VERTEX_ANIM, type VertexAnimConfig, type PulseState } from '../core/animate'
 import {
@@ -667,6 +670,95 @@ function exportPNG() {
   }
 }
 
+function exportSVG() {
+  const fromShape = getShape(config.from as any)
+  const vb = fromShape.viewBox.split(' ').map(Number) as [number, number, number, number]
+  const toShape = getShape(config.to as any)
+  const totalSteps = config.steps
+
+  // Get current paths
+  const paths: string[] = []
+  for (let i = 0; i < totalSteps; i++) {
+    const t = totalSteps === 1 ? 0 : i / (totalSteps - 1)
+    const pts = getMorphPoints(fromShape.path, toShape.path, t)
+    paths.push(smoothPath(pts))
+  }
+
+  const colours = {
+    current: config.colourFrom,
+    catalyst: config.colourTo,
+    future: config.colourCatalyst,
+  }
+
+  const steps: SVGExportStep[] = paths.map((path, i) => {
+    const { scale, offsetX, offsetY } = computeStepTransform(
+      i, totalSteps, config.align as any, config.spread, config.scaleFrom, config.scaleTo,
+    )
+
+    let opacity = 1.0
+    if (config.variant === 'wireframe') {
+      opacity = 1 - (i / paths.length) * 0.6
+    } else if (config.variant === 'gradient') {
+      const t = paths.length === 1 ? 1 : i / (paths.length - 1)
+      opacity = Math.max(0.05, t * t)
+    }
+
+    const cent: [number, number] = config.variant === 'filled'
+      ? pathCentroid(path)
+      : [vb[2] / 2, vb[3] / 2]
+
+    let gradientImage: string | undefined
+    if (config.variant === 'filled' || config.variant === 'gradient') {
+      const angleDeg = 90 + (i / totalSteps) * 120
+      gradientImage = rasterizeConicGradient({
+        colours,
+        angleDeg,
+        centerX: cent[0],
+        centerY: cent[1],
+        viewBoxWidth: vb[2],
+        viewBoxHeight: vb[3],
+      })
+    }
+
+    const width = canvas.clientWidth
+    const height = canvas.clientHeight
+    const scaleX = width / vb[2]
+    const scaleY = height / vb[3]
+    const scaleFactor = Math.min(scaleX, scaleY) * 0.8
+    const strokeWidth = config.variant === 'wireframe' ? 1.5 / scaleFactor : undefined
+
+    return {
+      path,
+      centroid: cent,
+      transform: { scale, offsetX, offsetY },
+      opacity,
+      strokeWidth,
+      gradientImage,
+    }
+  })
+
+  const svgConfig: SVGExportConfig = {
+    width: canvas.clientWidth,
+    height: canvas.clientHeight,
+    viewBox: vb,
+    background: exportConfig.transparentBg ? 'transparent' : config.background,
+    variant: config.variant as any,
+    noise: config.noise,
+    colours,
+    steps,
+  }
+
+  const svgString = generateSVG(svgConfig)
+  const blob = new Blob([svgString], { type: 'image/svg+xml' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'brand-shape.svg'
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 const exportFolder = gui.addFolder('Export')
 exportFolder.add(exportConfig, 'transparentBg').name('Transparent BG')
 exportFolder.add({ exportPNG }, 'exportPNG').name('Export PNG')
+exportFolder.add({ exportSVG }, 'exportSVG').name('Export SVG')
