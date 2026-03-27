@@ -87,6 +87,60 @@ function generateNoiseTexture(size: number, opacity: number): ImageData {
   return new ImageData(data, size, size)
 }
 
+/**
+ * Apply masked blur: composites a blurred copy of the scene through a linear gradient mask.
+ */
+function applyMaskedBlur(
+  ctx: CanvasRenderingContext2D,
+  scene: OffscreenCanvas,
+  width: number,
+  height: number,
+  dpr: number,
+  blur: BlurConfig,
+): void {
+  const blurredCanvas = new OffscreenCanvas(width * dpr, height * dpr)
+  const blurredCtx = blurredCanvas.getContext('2d')!
+  blurredCtx.filter = `blur(${blur.maskBlurRadius}px)`
+  blurredCtx.drawImage(scene, 0, 0)
+  blurredCtx.filter = 'none'
+
+  const maskCanvas = new OffscreenCanvas(width * dpr, height * dpr)
+  const maskCtx = maskCanvas.getContext('2d')!
+  maskCtx.scale(dpr, dpr)
+
+  const angleRad = (blur.maskAngle * Math.PI) / 180
+  const cx = width / 2
+  const cy = height / 2
+  const len = Math.max(width, height)
+  const dx = Math.cos(angleRad) * len
+  const dy = Math.sin(angleRad) * len
+
+  const gradient = maskCtx.createLinearGradient(
+    cx - dx, cy - dy,
+    cx + dx, cy + dy,
+  )
+
+  const pos = blur.maskPosition
+  const halfSpread = Math.max(0.001, (1 - blur.maskHardness) * 0.5)
+  const stop0 = Math.max(0, pos - halfSpread)
+  const stop1 = Math.min(1, pos + halfSpread)
+
+  gradient.addColorStop(0, 'rgba(0,0,0,1)')
+  gradient.addColorStop(stop0, 'rgba(0,0,0,1)')
+  gradient.addColorStop(stop1, 'rgba(0,0,0,0)')
+  gradient.addColorStop(1, 'rgba(0,0,0,0)')
+
+  maskCtx.fillStyle = gradient
+  maskCtx.fillRect(0, 0, width, height)
+
+  blurredCtx.globalCompositeOperation = 'destination-in'
+  blurredCtx.drawImage(maskCanvas, 0, 0)
+  blurredCtx.globalCompositeOperation = 'source-over'
+
+  ctx.drawImage(scene, 0, 0, width, height)
+  ctx.drawImage(blurredCanvas, 0, 0, width, height)
+}
+
 /** Main render function. Draws brand shape to the given canvas. */
 export function render(canvas: HTMLCanvasElement, config: RenderConfig): void {
   const ctx = canvas.getContext('2d')
@@ -190,8 +244,12 @@ export function render(canvas: HTMLCanvasElement, config: RenderConfig): void {
     }
   }
 
-  // Final compositing: draw offscreen to main canvas
-  ctx.drawImage(offscreen, 0, 0, width, height)
+  // Final compositing: masked blur or direct draw
+  if (config.blur.maskEnabled && config.blur.maskBlurRadius > 0) {
+    applyMaskedBlur(ctx, offscreen, width, height, dpr, config.blur)
+  } else {
+    ctx.drawImage(offscreen, 0, 0, width, height)
+  }
 }
 
 function renderWireframe(
