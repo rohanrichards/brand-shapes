@@ -839,6 +839,12 @@ function exportSVG() {
     const scaleFactor = Math.min(screenW / vb[2], screenH / vb[3]) * 0.8
     const strokeWidth = config.variant === 'wireframe' ? 1.5 / scaleFactor : undefined
 
+    const hasLayerBlur = config.layerBlurFrom > 0 || config.layerBlurTo > 0
+    const t = paths.length === 1 ? 0 : i / (paths.length - 1)
+    const blurRadius = hasLayerBlur
+      ? config.layerBlurFrom + (config.layerBlurTo - config.layerBlurFrom) * t
+      : 0
+
     return {
       path,
       centroid: cent,
@@ -846,6 +852,7 @@ function exportSVG() {
       opacity,
       strokeWidth,
       gradientImage,
+      blurRadius,
     }
   })
 

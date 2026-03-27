@@ -18,6 +18,7 @@ export interface SVGExportStep {
   opacity: number
   strokeWidth?: number
   gradientImage?: string
+  blurRadius?: number
 }
 
 export interface SVGExportConfig {
@@ -111,7 +112,16 @@ function filledGradientDefs(config: SVGExportConfig): string {
     </clipPath>`
   ).join('\n    ')
 
+  const blurFilters = config.steps
+    .map((step, i) => {
+      if (!step.blurRadius || step.blurRadius <= 0) return ''
+      return `<filter id="blur-${i}"><feGaussianBlur stdDeviation="${step.blurRadius}"/></filter>`
+    })
+    .filter(Boolean)
+    .join('\n    ')
+
   let defs = clipPaths
+  if (blurFilters) defs += `\n    ${blurFilters}`
 
   if (config.noise && config.noiseImage) {
     defs += `\n    ${noiseDefs(config)}`
@@ -165,7 +175,9 @@ function filledGradientBody(config: SVGExportConfig): string {
       ? `\n        <rect x="-50" y="-50" width="${vw + 100}" height="${vh + 100}" fill="url(#noiseTile)"/>`
       : ''
 
-    return `<g clip-path="url(#clip-${i})" opacity="${step.opacity}"${stepTransform}>
+    const filterAttr = step.blurRadius && step.blurRadius > 0 ? ` filter="url(#blur-${i})"` : ''
+
+    return `<g clip-path="url(#clip-${i})" opacity="${step.opacity}"${stepTransform}${filterAttr}>
         <image href="${href}" x="-50" y="-50" width="${vw + 100}" height="${vh + 100}"/>${noiseRect}
       </g>`
   }).join('\n    ')
