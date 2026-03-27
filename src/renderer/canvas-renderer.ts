@@ -49,6 +49,14 @@ export interface RenderConfig {
   stepIndices?: number[]
   /** Total step count for transform calculations (used with stepIndices). */
   totalStepCount?: number
+  /** Base gradient rotation in degrees (default 90). Only affects filled/gradient variants. */
+  gradientAngle?: number
+  /** Per-layer angular spread in degrees (default 120). Only affects filled/gradient variants. */
+  gradientSpread?: number
+  /** Gradient center X offset from centroid in viewBox units (default 0). */
+  gradientCenterX?: number
+  /** Gradient center Y offset from centroid in viewBox units (default 0). */
+  gradientCenterY?: number
 }
 
 export const DEFAULT_CONFIG: RenderConfig = {
@@ -216,8 +224,14 @@ function renderFilled(
     )
     const totalScale = scale * stepScale
 
-    const angleDeg = 90 + (stepIdx / stepTotal) * 120
+    const baseAngle = config.gradientAngle ?? 90
+    const spreadAngle = config.gradientSpread ?? 120
+    const t = stepIdx / stepTotal
+    const angleDeg = baseAngle - (1 - t) * spreadAngle
     const angleRad = (angleDeg * Math.PI) / 180
+
+    const gcx = shapeCenterX + (config.gradientCenterX ?? 0)
+    const gcy = shapeCenterY + (config.gradientCenterY ?? 0)
 
     ctx.save()
 
@@ -232,8 +246,8 @@ function renderFilled(
     // Clip to THIS step's shape path
     ctx.clip(new Path2D(steps[i]))
 
-    // Create conic gradient in shape-local space, centered on shape
-    const conicGradient = ctx.createConicGradient(angleRad, shapeCenterX, shapeCenterY)
+    // Create conic gradient in shape-local space, centered on shape + user offset
+    const conicGradient = ctx.createConicGradient(angleRad, gcx, gcy)
     conicGradient.addColorStop(0, colours.current)
     conicGradient.addColorStop(0.293, colours.future)
     conicGradient.addColorStop(0.459, colours.catalyst)
@@ -262,6 +276,11 @@ function renderGradient(
   const shapeCenterX = vb[2] / 2
   const shapeCenterY = vb[3] / 2
 
+  const baseAngle = config.gradientAngle ?? 90
+  const spreadAngle = config.gradientSpread ?? 120
+  const gcx = shapeCenterX + (config.gradientCenterX ?? 0)
+  const gcy = shapeCenterY + (config.gradientCenterY ?? 0)
+
   for (let i = 0; i < steps.length; i++) {
     const stepIdx = config.stepIndices ? config.stepIndices[i] : i
     const stepTotal = config.totalStepCount || steps.length
@@ -274,7 +293,7 @@ function renderGradient(
     const opacity = t * t // quadratic: 0, 0.01, 0.04, ... 0.64, 1.0
     const totalScale = scale * stepScale
 
-    const angleDeg = 90 + (stepIdx / stepTotal) * 120
+    const angleDeg = baseAngle - (1 - stepIdx / stepTotal) * spreadAngle
     const angleRad = (angleDeg * Math.PI) / 180
 
     ctx.save()
@@ -291,7 +310,7 @@ function renderGradient(
 
     ctx.clip(new Path2D(steps[i]))
 
-    const conicGradient = ctx.createConicGradient(angleRad, shapeCenterX, shapeCenterY)
+    const conicGradient = ctx.createConicGradient(angleRad, gcx, gcy)
     conicGradient.addColorStop(0, colours.current)
     conicGradient.addColorStop(0.293, colours.future)
     conicGradient.addColorStop(0.459, colours.catalyst)

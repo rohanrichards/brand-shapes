@@ -35,6 +35,11 @@ const config = {
   spread: 1.2,
   scaleFrom: 1.15,
   scaleTo: 0.95,
+  // Gradient controls
+  gradientAngle: 90,
+  gradientSpread: 120,
+  gradientCenterX: 0,
+  gradientCenterY: 0,
   // Animation
   animMode: 'none' as 'none' | 'trail' | 'breathe' | 'audio',
   duration: 2000,
@@ -67,6 +72,10 @@ const locks = {
   spread: false,
   scaleFrom: false,
   scaleTo: false,
+  gradientAngle: false,
+  gradientSpread: false,
+  gradientCenterX: false,
+  gradientCenterY: false,
 }
 
 const canvas = document.getElementById('canvas') as HTMLCanvasElement
@@ -98,6 +107,10 @@ function buildRenderConfig(customSteps?: string[]): RenderConfig {
     spread: config.spread,
     scaleFrom: config.scaleFrom,
     scaleTo: config.scaleTo,
+    gradientAngle: config.gradientAngle,
+    gradientSpread: config.gradientSpread,
+    gradientCenterX: config.gradientCenterX,
+    gradientCenterY: config.gradientCenterY,
     customSteps: customSteps,
   }
 }
@@ -543,6 +556,10 @@ function randomize() {
   if (!locks.scaleFrom) config.scaleFrom = Math.round((Math.random() * 1.5 + 0.5) * 100) / 100
   if (!locks.scaleTo) config.scaleTo = Math.round((Math.random() * 1.5 + 0.5) * 100) / 100
   if (!locks.background) config.background = pick(Object.values(backgroundOptions))
+  if (!locks.gradientAngle) config.gradientAngle = Math.floor(Math.random() * 360)
+  if (!locks.gradientSpread) config.gradientSpread = Math.floor(Math.random() * 301) + 30
+  if (!locks.gradientCenterX) config.gradientCenterX = Math.round((Math.random() * 200 - 100) * 10) / 10
+  if (!locks.gradientCenterY) config.gradientCenterY = Math.round((Math.random() * 200 - 100) * 10) / 10
   gui.controllersRecursive().forEach(c => c.updateDisplay())
   onConfigChange()
 }
@@ -581,6 +598,12 @@ effectsFolder.add(config, 'noise').name('Noise').onChange(onConfigChange)
 effectsFolder.add(config, 'blur').name('Blur').onChange(onConfigChange)
 effectsFolder.add(config, 'noiseOpacity', 0, 0.5, 0.01).name('Noise Opacity').onChange(onConfigChange)
 effectsFolder.add(config, 'blurRadius', 0, 10, 0.5).name('Blur Radius').onChange(onConfigChange)
+
+const gradientFolder = gui.addFolder('Gradient')
+addLockToggle(gradientFolder.add(config, 'gradientAngle', 0, 360, 1).name('Angle').onChange(onConfigChange), 'gradientAngle')
+addLockToggle(gradientFolder.add(config, 'gradientSpread', 0, 360, 1).name('Layer Spread').onChange(onConfigChange), 'gradientSpread')
+addLockToggle(gradientFolder.add(config, 'gradientCenterX', -100, 100, 0.5).name('Center X').onChange(onConfigChange), 'gradientCenterX')
+addLockToggle(gradientFolder.add(config, 'gradientCenterY', -100, 100, 0.5).name('Center Y').onChange(onConfigChange), 'gradientCenterY')
 
 const layoutFolder = gui.addFolder('Layout')
 addLockToggle(layoutFolder.add(config, 'align', ['left', 'right', 'top', 'bottom', 'center']).name('Align').onChange(onConfigChange), 'align')
@@ -719,12 +742,14 @@ function exportSVG() {
 
     let gradientImage: string | undefined
     if (config.variant === 'filled' || config.variant === 'gradient') {
-      const angleDeg = 90 + (i / totalSteps) * 120
+      const baseAngle = config.gradientAngle ?? 90
+      const spreadAngle = config.gradientSpread ?? 120
+      const angleDeg = baseAngle - (1 - i / totalSteps) * spreadAngle
       gradientImage = rasterizeConicGradient({
         colours,
         angleDeg,
-        centerX: cent[0],
-        centerY: cent[1],
+        centerX: cent[0] + (config.gradientCenterX ?? 0),
+        centerY: cent[1] + (config.gradientCenterY ?? 0),
         viewBoxWidth: vb[2],
         viewBoxHeight: vb[3],
       }, gradientScaleFactor)
