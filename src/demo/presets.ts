@@ -18,6 +18,10 @@ export interface PresetConfig {
   scaleFrom: number
   scaleTo: number
   background: string
+  gradientAngle?: number
+  gradientSpread?: number
+  gradientCenterX?: number
+  gradientCenterY?: number
 }
 
 export const presets: Record<string, PresetConfig> = {

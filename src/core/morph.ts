@@ -110,6 +110,9 @@ function pointsToSmooth(points: Point[]): string {
   return d + 'Z'
 }
 
+// Cache for getMorphPoints — avoids recreating flubber interpolator on every call
+let _morphPointsCache: { key: string; fn: (t: number) => string } | null = null
+
 /**
  * Get the base (unanimated) points for a morph interpolation at time t.
  * Returns uniformly-sampled points that can be displaced for animation.
@@ -119,9 +122,12 @@ export function getMorphPoints(
   toPath: string,
   t: number,
 ): Point[] {
-  const flubberInterp = interpolate(fromPath, toPath, { maxSegmentLength: 1 })
+  const cacheKey = `${fromPath}|${toPath}`
+  if (!_morphPointsCache || _morphPointsCache.key !== cacheKey) {
+    _morphPointsCache = { key: cacheKey, fn: interpolate(fromPath, toPath, { maxSegmentLength: 1 }) }
+  }
   const clamped = Math.max(0.001, Math.min(0.999, t))
-  const rawPoly = flubberInterp(clamped)
+  const rawPoly = _morphPointsCache.fn(clamped)
   const points = parsePoly(rawPoly)
   return resampleUniform(points, 120)
 }

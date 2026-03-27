@@ -37,6 +37,10 @@ export class BrandShape extends LitElement {
     blurRadius: { type: Number, attribute: 'blur-radius' },
     scaleFrom: { type: Number, attribute: 'scale-from' },
     scaleTo: { type: Number, attribute: 'scale-to' },
+    gradientAngle: { type: Number, attribute: 'gradient-angle' },
+    gradientSpread: { type: Number, attribute: 'gradient-spread' },
+    gradientCenterX: { type: Number, attribute: 'gradient-center-x' },
+    gradientCenterY: { type: Number, attribute: 'gradient-center-y' },
   }
 
   from: ShapeName = 'organic-1'
@@ -58,6 +62,10 @@ export class BrandShape extends LitElement {
   blurRadius = 2
   scaleFrom = 1.15
   scaleTo = 0.95
+  gradientAngle = 90
+  gradientSpread = 120
+  gradientCenterX = 0
+  gradientCenterY = 0
 
   private _canvas: HTMLCanvasElement | null = null
   private _resizeObserver: ResizeObserver | null = null
@@ -108,6 +116,10 @@ export class BrandShape extends LitElement {
       spread: this.spread,
       scaleFrom: this.scaleFrom,
       scaleTo: this.scaleTo,
+      gradientAngle: this.gradientAngle,
+      gradientSpread: this.gradientSpread,
+      gradientCenterX: this.gradientCenterX,
+      gradientCenterY: this.gradientCenterY,
     }
   }
 

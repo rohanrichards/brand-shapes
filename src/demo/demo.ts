@@ -1,8 +1,11 @@
 import GUI from 'lil-gui'
 import { render, type RenderConfig } from '../renderer/canvas-renderer'
 import { shapeNames, getShape } from '../core/shapes'
-import { DEFAULT_NOISE_CONFIG } from '../core/effects'
-import { getMorphPoints, smoothPath, type Point } from '../core/morph'
+import { DEFAULT_NOISE_CONFIG, buildLinearGradientStops } from '../core/effects'
+import { generateSVG, type SVGExportConfig, type SVGExportStep } from '../core/svg-export'
+import { pathCentroid, computeStepTransform } from '../core/transforms'
+import { rasterizeConicGradient, rasterizeNoiseTile } from './gradient-rasterizer'
+import { getMorphPoints, generateMorphSteps, smoothPath, type Point } from '../core/morph'
 import { displacePoints, displacePointsAudio, DEFAULT_VERTEX_ANIM, type VertexAnimConfig, type PulseState } from '../core/animate'
 import {
   createBandBinRanges, extractBandLevels, normalizeLevels, smoothLevels,
@@ -32,6 +35,11 @@ const config = {
   spread: 1.2,
   scaleFrom: 1.15,
   scaleTo: 0.95,
+  // Gradient controls
+  gradientAngle: 90,
+  gradientSpread: 120,
+  gradientCenterX: 0,
+  gradientCenterY: 0,
   // Animation
   animMode: 'none' as 'none' | 'trail' | 'breathe' | 'audio',
   duration: 2000,
@@ -64,6 +72,10 @@ const locks = {
   spread: false,
   scaleFrom: false,
   scaleTo: false,
+  gradientAngle: false,
+  gradientSpread: false,
+  gradientCenterX: false,
+  gradientCenterY: false,
 }
 
 const canvas = document.getElementById('canvas') as HTMLCanvasElement
@@ -95,6 +107,10 @@ function buildRenderConfig(customSteps?: string[]): RenderConfig {
     spread: config.spread,
     scaleFrom: config.scaleFrom,
     scaleTo: config.scaleTo,
+    gradientAngle: config.gradientAngle,
+    gradientSpread: config.gradientSpread,
+    gradientCenterX: config.gradientCenterX,
+    gradientCenterY: config.gradientCenterY,
     customSteps: customSteps,
   }
 }
@@ -540,6 +556,10 @@ function randomize() {
   if (!locks.scaleFrom) config.scaleFrom = Math.round((Math.random() * 1.5 + 0.5) * 100) / 100
   if (!locks.scaleTo) config.scaleTo = Math.round((Math.random() * 1.5 + 0.5) * 100) / 100
   if (!locks.background) config.background = pick(Object.values(backgroundOptions))
+  if (!locks.gradientAngle) config.gradientAngle = Math.floor(Math.random() * 360)
+  if (!locks.gradientSpread) config.gradientSpread = Math.floor(Math.random() * 301) + 30
+  if (!locks.gradientCenterX) config.gradientCenterX = Math.round((Math.random() * 200 - 100) * 10) / 10
+  if (!locks.gradientCenterY) config.gradientCenterY = Math.round((Math.random() * 200 - 100) * 10) / 10
   gui.controllersRecursive().forEach(c => c.updateDisplay())
   onConfigChange()
 }
@@ -578,6 +598,12 @@ effectsFolder.add(config, 'noise').name('Noise').onChange(onConfigChange)
 effectsFolder.add(config, 'blur').name('Blur').onChange(onConfigChange)
 effectsFolder.add(config, 'noiseOpacity', 0, 0.5, 0.01).name('Noise Opacity').onChange(onConfigChange)
 effectsFolder.add(config, 'blurRadius', 0, 10, 0.5).name('Blur Radius').onChange(onConfigChange)
+
+const gradientFolder = gui.addFolder('Gradient')
+addLockToggle(gradientFolder.add(config, 'gradientAngle', 0, 360, 1).name('Angle').onChange(onConfigChange), 'gradientAngle')
+addLockToggle(gradientFolder.add(config, 'gradientSpread', 0, 360, 1).name('Layer Spread').onChange(onConfigChange), 'gradientSpread')
+addLockToggle(gradientFolder.add(config, 'gradientCenterX', -100, 100, 0.5).name('Center X').onChange(onConfigChange), 'gradientCenterX')
+addLockToggle(gradientFolder.add(config, 'gradientCenterY', -100, 100, 0.5).name('Center Y').onChange(onConfigChange), 'gradientCenterY')
 
 const layoutFolder = gui.addFolder('Layout')
 addLockToggle(layoutFolder.add(config, 'align', ['left', 'right', 'top', 'bottom', 'center']).name('Align').onChange(onConfigChange), 'align')
@@ -634,6 +660,7 @@ updateAnimFolders()
 
 const exportConfig = {
   transparentBg: false,
+  highRes: false,
 }
 
 function exportPNG() {
@@ -667,6 +694,113 @@ function exportPNG() {
   }
 }
 
+function exportSVG() {
+  const fromShape = getShape(config.from as any)
+  const vb = fromShape.viewBox.split(' ').map(Number) as [number, number, number, number]
+  const toShape = getShape(config.to as any)
+  const totalSteps = config.steps
+
+  // Use generateMorphSteps — same pipeline as the canvas renderer
+  // (flubber interpolate → uniform resample → smooth). NOT getMorphPoints which
+  // is for animation vertex displacement and produces different paths.
+  const { steps: paths } = generateMorphSteps(fromShape.path, toShape.path, totalSteps)
+
+  const colours = {
+    current: config.colourFrom,
+    catalyst: config.colourTo,
+    future: config.colourCatalyst,
+  }
+
+  // Compute base transform first — needed for gradient resolution
+  const screenW = canvas.clientWidth
+  const screenH = canvas.clientHeight
+  const baseScale = Math.min(screenW / vb[2], screenH / vb[3]) * 0.8
+  const tx = (screenW - vb[2] * baseScale) / 2
+  const ty = (screenH - vb[3] * baseScale) / 2
+
+  // Gradient scale factor: baseScale ensures 1:1 screen pixel coverage,
+  // multiply by DPR for retina crispness. High-res mode doubles for print quality.
+  const resMultiplier = exportConfig.highRes ? 2 : 1
+  const gradientScaleFactor = baseScale * (window.devicePixelRatio || 1) * resMultiplier
+
+  const steps: SVGExportStep[] = paths.map((path, i) => {
+    const { scale, offsetX, offsetY } = computeStepTransform(
+      i, totalSteps, config.align as any, config.spread, config.scaleFrom, config.scaleTo,
+    )
+
+    let opacity = 1.0
+    if (config.variant === 'wireframe') {
+      opacity = 1 - (i / paths.length) * 0.6
+    } else if (config.variant === 'gradient') {
+      const t = paths.length === 1 ? 1 : i / (paths.length - 1)
+      opacity = Math.max(0.05, t * t)
+    }
+
+    const cent: [number, number] = config.variant === 'filled'
+      ? pathCentroid(path)
+      : [vb[2] / 2, vb[3] / 2]
+
+    let gradientImage: string | undefined
+    if (config.variant === 'filled' || config.variant === 'gradient') {
+      const baseAngle = config.gradientAngle ?? 90
+      const spreadAngle = config.gradientSpread ?? 120
+      const angleDeg = baseAngle - (1 - i / totalSteps) * spreadAngle
+      gradientImage = rasterizeConicGradient({
+        colours,
+        angleDeg,
+        centerX: cent[0] + (config.gradientCenterX ?? 0),
+        centerY: cent[1] + (config.gradientCenterY ?? 0),
+        viewBoxWidth: vb[2],
+        viewBoxHeight: vb[3],
+      }, gradientScaleFactor)
+    }
+
+    const scaleFactor = Math.min(screenW / vb[2], screenH / vb[3]) * 0.8
+    const strokeWidth = config.variant === 'wireframe' ? 1.5 / scaleFactor : undefined
+
+    return {
+      path,
+      centroid: cent,
+      transform: { scale, offsetX, offsetY },
+      opacity,
+      strokeWidth,
+      gradientImage,
+    }
+  })
+
+  // Rasterize noise tile matching the canvas renderer's exact algorithm
+  // High-res mode uses larger tile for print quality
+  const noiseTileSize = exportConfig.highRes ? 512 : 256
+  const noiseImage = config.noise ? rasterizeNoiseTile(noiseTileSize, config.noiseOpacity) : undefined
+
+  const svgConfig: SVGExportConfig = {
+    width: screenW,
+    height: screenH,
+    viewBox: [0, 0, screenW, screenH],
+    background: exportConfig.transparentBg ? 'transparent' : config.background,
+    variant: config.variant as any,
+    noise: config.noise,
+    noiseOpacity: config.noiseOpacity,
+    colours,
+    steps,
+    baseTransform: { translateX: tx, translateY: ty, scale: baseScale },
+    noiseImage,
+    noiseTileSize,
+    shapeViewBox: vb,
+  }
+
+  const svgString = generateSVG(svgConfig)
+  const blob = new Blob([svgString], { type: 'image/svg+xml' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'brand-shape.svg'
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 const exportFolder = gui.addFolder('Export')
 exportFolder.add(exportConfig, 'transparentBg').name('Transparent BG')
+exportFolder.add(exportConfig, 'highRes').name('High Res SVG')
 exportFolder.add({ exportPNG }, 'exportPNG').name('Export PNG')
+exportFolder.add({ exportSVG }, 'exportSVG').name('Export SVG')
