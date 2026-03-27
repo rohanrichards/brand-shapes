@@ -30,6 +30,7 @@ const config = {
   noise: true,
   noiseOpacity: 0.08,
   // Blur controls
+  layerBlurEnabled: false,
   layerBlurFrom: 0,
   layerBlurTo: 0,
   maskBlurEnabled: false,
@@ -82,12 +83,6 @@ const locks = {
   gradientSpread: false,
   gradientCenterX: false,
   gradientCenterY: false,
-  layerBlurFrom: false,
-  layerBlurTo: false,
-  maskAngle: false,
-  maskPosition: false,
-  maskHardness: false,
-  maskBlurRadius: false,
 }
 
 const canvas = document.getElementById('canvas') as HTMLCanvasElement
@@ -112,8 +107,8 @@ function buildRenderConfig(customSteps?: string[]): RenderConfig {
       size: DEFAULT_NOISE_CONFIG.size,
     },
     blur: {
-      layerBlurFrom: config.layerBlurFrom,
-      layerBlurTo: config.layerBlurTo,
+      layerBlurFrom: config.layerBlurEnabled ? config.layerBlurFrom : 0,
+      layerBlurTo: config.layerBlurEnabled ? config.layerBlurTo : 0,
       maskEnabled: config.maskBlurEnabled,
       maskAngle: config.maskAngle,
       maskPosition: config.maskPosition,
@@ -577,12 +572,6 @@ function randomize() {
   if (!locks.gradientSpread) config.gradientSpread = Math.floor(Math.random() * 301) + 30
   if (!locks.gradientCenterX) config.gradientCenterX = Math.round((Math.random() * 200 - 100) * 10) / 10
   if (!locks.gradientCenterY) config.gradientCenterY = Math.round((Math.random() * 200 - 100) * 10) / 10
-  if (!locks.layerBlurFrom) config.layerBlurFrom = Math.round(Math.random() * 15 * 10) / 10
-  if (!locks.layerBlurTo) config.layerBlurTo = Math.round(Math.random() * 5 * 10) / 10
-  if (!locks.maskAngle) config.maskAngle = Math.floor(Math.random() * 360)
-  if (!locks.maskPosition) config.maskPosition = Math.round(Math.random() * 100) / 100
-  if (!locks.maskHardness) config.maskHardness = Math.round(Math.random() * 100) / 100
-  if (!locks.maskBlurRadius) config.maskBlurRadius = Math.round(Math.random() * 20 * 10) / 10
   gui.controllersRecursive().forEach(c => c.updateDisplay())
   onConfigChange()
 }
@@ -621,23 +610,27 @@ effectsFolder.add(config, 'noise').name('Noise').onChange(onConfigChange)
 effectsFolder.add(config, 'noiseOpacity', 0, 0.5, 0.01).name('Noise Opacity').onChange(onConfigChange)
 
 const blurFolder = gui.addFolder('Blur')
-addLockToggle(blurFolder.add(config, 'layerBlurFrom', 0, 30, 0.5).name('Layer From').onChange(onConfigChange), 'layerBlurFrom')
-addLockToggle(blurFolder.add(config, 'layerBlurTo', 0, 30, 0.5).name('Layer To').onChange(onConfigChange), 'layerBlurTo')
+blurFolder.add(config, 'layerBlurEnabled').name('Layer Enabled').onChange(onConfigChange)
+blurFolder.add(config, 'layerBlurFrom', 0, 30, 0.5).name('Layer From').onChange(onConfigChange)
+blurFolder.add(config, 'layerBlurTo', 0, 30, 0.5).name('Layer To').onChange(onConfigChange)
 blurFolder.add(config, 'maskBlurEnabled').name('Mask Enabled').onChange(onConfigChange)
-addLockToggle(blurFolder.add(config, 'maskAngle', 0, 360, 1).name('Mask Angle').onChange(onConfigChange), 'maskAngle')
-addLockToggle(blurFolder.add(config, 'maskPosition', 0, 1, 0.01).name('Mask Position').onChange(onConfigChange), 'maskPosition')
-addLockToggle(blurFolder.add(config, 'maskHardness', 0, 1, 0.01).name('Mask Hardness').onChange(onConfigChange), 'maskHardness')
-addLockToggle(blurFolder.add(config, 'maskBlurRadius', 0, 30, 0.5).name('Mask Radius').onChange(onConfigChange), 'maskBlurRadius')
+const maskAngleCtrl = blurFolder.add(config, 'maskAngle', 0, 360, 1).name('Mask Angle').onChange(onMaskSliderChange)
+const maskPosCtrl = blurFolder.add(config, 'maskPosition', 0, 1, 0.01).name('Mask Position').onChange(onMaskSliderChange)
+const maskHardCtrl = blurFolder.add(config, 'maskHardness', 0, 1, 0.01).name('Mask Hardness').onChange(onMaskSliderChange)
+const maskRadCtrl = blurFolder.add(config, 'maskBlurRadius', 0, 30, 0.5).name('Mask Radius').onChange(onMaskSliderChange)
+for (const ctrl of [maskAngleCtrl, maskPosCtrl, maskHardCtrl, maskRadCtrl]) {
+  ctrl.domElement.addEventListener('pointerdown', onMaskSliderDown)
+}
 
-// Mask overlay — visible while dragging mask sliders
+// Mask overlay — shows the mask gradient region while mask is enabled
 const overlayCanvas = document.createElement('canvas')
 overlayCanvas.id = 'blur-mask-overlay'
-overlayCanvas.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;opacity:0;transition:opacity 0.15s'
+overlayCanvas.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;opacity:0;transition:opacity 0.15s;z-index:999'
 document.body.appendChild(overlayCanvas)
 
 function drawMaskOverlay() {
-  const w = overlayCanvas.clientWidth
-  const h = overlayCanvas.clientHeight
+  const w = window.innerWidth
+  const h = window.innerHeight
   const dpr = window.devicePixelRatio || 1
   overlayCanvas.width = w * dpr
   overlayCanvas.height = h * dpr
@@ -665,19 +658,22 @@ function drawMaskOverlay() {
   octx.fillRect(0, 0, w, h)
 }
 
-const maskControllerNames = ['maskAngle', 'maskPosition', 'maskHardness', 'maskBlurRadius']
-blurFolder.controllersRecursive().forEach(c => {
-  if (maskControllerNames.includes(c.property)) {
-    const el = c.domElement
-    el.addEventListener('pointerdown', () => {
-      overlayCanvas.style.opacity = '1'
-      drawMaskOverlay()
-    })
-    el.addEventListener('input', () => { drawMaskOverlay() })
-  }
-})
+// Show overlay only while interacting with mask sliders
+let maskDragging = false
+function onMaskSliderDown() {
+  maskDragging = true
+  overlayCanvas.style.opacity = '1'
+  drawMaskOverlay()
+}
+function onMaskSliderChange() {
+  onConfigChange()
+  if (maskDragging) drawMaskOverlay()
+}
 window.addEventListener('pointerup', () => {
-  overlayCanvas.style.opacity = '0'
+  if (maskDragging) {
+    maskDragging = false
+    overlayCanvas.style.opacity = '0'
+  }
 })
 
 const gradientFolder = gui.addFolder('Gradient')
@@ -839,10 +835,10 @@ function exportSVG() {
     const scaleFactor = Math.min(screenW / vb[2], screenH / vb[3]) * 0.8
     const strokeWidth = config.variant === 'wireframe' ? 1.5 / scaleFactor : undefined
 
-    const hasLayerBlur = config.layerBlurFrom > 0 || config.layerBlurTo > 0
+    const hasLayerBlur = config.layerBlurEnabled && (config.layerBlurFrom > 0 || config.layerBlurTo > 0)
     const t = paths.length === 1 ? 0 : i / (paths.length - 1)
     const blurRadius = hasLayerBlur
-      ? config.layerBlurFrom + (config.layerBlurTo - config.layerBlurFrom) * t
+      ? config.layerBlurTo + (config.layerBlurFrom - config.layerBlurTo) * t
       : 0
 
     return {

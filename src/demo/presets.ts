@@ -13,6 +13,7 @@ export interface PresetConfig {
   align: Alignment
   spread: number
   noiseOpacity: number
+  layerBlurEnabled?: boolean
   layerBlurFrom?: number
   layerBlurTo?: number
   maskBlurEnabled?: boolean
@@ -54,7 +55,7 @@ export const presets: Record<string, PresetConfig> = {
     colourFrom: '#BEF958', colourCatalyst: '#FEA6E1', colourTo: '#81330C',
     variant: 'filled',
     noise: true,
-    layerBlurFrom: 6, layerBlurTo: 0,
+    layerBlurEnabled: true, layerBlurFrom: 6, layerBlurTo: 0,
     align: 'center', spread: 1.0,
     noiseOpacity: 0.10, scaleFrom: 1.2, scaleTo: 0.85,
     background: '#4B01E6',

@@ -133,12 +133,28 @@ function applyMaskedBlur(
   maskCtx.fillStyle = gradient
   maskCtx.fillRect(0, 0, width, height)
 
+  // Composite on intermediate canvas to avoid bloom:
+  // Sharp scene as base, blur region erased and replaced with blurred version.
+  const resultCanvas = new OffscreenCanvas(width * dpr, height * dpr)
+  const resultCtx = resultCanvas.getContext('2d')!
+
+  // Start with sharp scene
+  resultCtx.drawImage(scene, 0, 0)
+  // Erase the blur region from the sharp base
+  resultCtx.globalCompositeOperation = 'destination-out'
+  resultCtx.drawImage(maskCanvas, 0, 0)
+  resultCtx.globalCompositeOperation = 'source-over'
+
+  // Mask the blurred scene to only the blur region
   blurredCtx.globalCompositeOperation = 'destination-in'
   blurredCtx.drawImage(maskCanvas, 0, 0)
   blurredCtx.globalCompositeOperation = 'source-over'
 
-  ctx.drawImage(scene, 0, 0, width, height)
-  ctx.drawImage(blurredCanvas, 0, 0, width, height)
+  // Fill the erased blur region with the blurred version
+  resultCtx.drawImage(blurredCanvas, 0, 0)
+
+  // Draw final result to main canvas (preserves background)
+  ctx.drawImage(resultCanvas, 0, 0, width, height)
 }
 
 /** Main render function. Draws brand shape to the given canvas. */
@@ -207,7 +223,7 @@ export function render(canvas: HTMLCanvasElement, config: RenderConfig): void {
       }
 
       const t = steps.length === 1 ? 0 : i / (steps.length - 1)
-      const blurRadius = config.blur.layerBlurFrom + (config.blur.layerBlurTo - config.blur.layerBlurFrom) * t
+      const blurRadius = config.blur.layerBlurTo + (config.blur.layerBlurFrom - config.blur.layerBlurTo) * t
 
       offCtx.filter = blurRadius > 0 ? `blur(${blurRadius}px)` : 'none'
       offCtx.drawImage(tempCanvas, 0, 0, width, height)
