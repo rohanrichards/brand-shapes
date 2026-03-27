@@ -93,11 +93,23 @@ export const DEFAULT_NOISE_CONFIG: NoiseConfig = {
 }
 
 export interface BlurConfig {
-  enabled: boolean
-  radius: number
+  // Per-layer blur (Mode 2)
+  layerBlurFrom: number   // 0-30, backmost layer blur radius
+  layerBlurTo: number     // 0-30, frontmost layer blur radius
+  // Masked blur (Mode 1)
+  maskEnabled: boolean
+  maskAngle: number       // 0-360 degrees
+  maskPosition: number    // 0-1
+  maskHardness: number    // 0-1
+  maskBlurRadius: number  // 0-30px
 }
 
 export const DEFAULT_BLUR_CONFIG: BlurConfig = {
-  enabled: false,
-  radius: 2,
+  layerBlurFrom: 0,
+  layerBlurTo: 0,
+  maskEnabled: false,
+  maskAngle: 0,
+  maskPosition: 0.5,
+  maskHardness: 0.5,
+  maskBlurRadius: 10,
 }

@@ -87,6 +87,76 @@ function generateNoiseTexture(size: number, opacity: number): ImageData {
   return new ImageData(data, size, size)
 }
 
+/**
+ * Apply masked blur: composites a blurred copy of the scene through a linear gradient mask.
+ */
+function applyMaskedBlur(
+  ctx: CanvasRenderingContext2D,
+  scene: OffscreenCanvas,
+  width: number,
+  height: number,
+  dpr: number,
+  blur: BlurConfig,
+): void {
+  const blurredCanvas = new OffscreenCanvas(width * dpr, height * dpr)
+  const blurredCtx = blurredCanvas.getContext('2d')!
+  blurredCtx.filter = `blur(${blur.maskBlurRadius}px)`
+  blurredCtx.drawImage(scene, 0, 0)
+  blurredCtx.filter = 'none'
+
+  const maskCanvas = new OffscreenCanvas(width * dpr, height * dpr)
+  const maskCtx = maskCanvas.getContext('2d')!
+  maskCtx.scale(dpr, dpr)
+
+  const angleRad = (blur.maskAngle * Math.PI) / 180
+  const cx = width / 2
+  const cy = height / 2
+  const len = Math.max(width, height)
+  const dx = Math.cos(angleRad) * len
+  const dy = Math.sin(angleRad) * len
+
+  const gradient = maskCtx.createLinearGradient(
+    cx - dx, cy - dy,
+    cx + dx, cy + dy,
+  )
+
+  const pos = blur.maskPosition
+  const halfSpread = Math.max(0.001, (1 - blur.maskHardness) * 0.5)
+  const stop0 = Math.max(0, pos - halfSpread)
+  const stop1 = Math.min(1, pos + halfSpread)
+
+  gradient.addColorStop(0, 'rgba(0,0,0,1)')
+  gradient.addColorStop(stop0, 'rgba(0,0,0,1)')
+  gradient.addColorStop(stop1, 'rgba(0,0,0,0)')
+  gradient.addColorStop(1, 'rgba(0,0,0,0)')
+
+  maskCtx.fillStyle = gradient
+  maskCtx.fillRect(0, 0, width, height)
+
+  // Composite on intermediate canvas to avoid bloom:
+  // Sharp scene as base, blur region erased and replaced with blurred version.
+  const resultCanvas = new OffscreenCanvas(width * dpr, height * dpr)
+  const resultCtx = resultCanvas.getContext('2d')!
+
+  // Start with sharp scene
+  resultCtx.drawImage(scene, 0, 0)
+  // Erase the blur region from the sharp base
+  resultCtx.globalCompositeOperation = 'destination-out'
+  resultCtx.drawImage(maskCanvas, 0, 0)
+  resultCtx.globalCompositeOperation = 'source-over'
+
+  // Mask the blurred scene to only the blur region
+  blurredCtx.globalCompositeOperation = 'destination-in'
+  blurredCtx.drawImage(maskCanvas, 0, 0)
+  blurredCtx.globalCompositeOperation = 'source-over'
+
+  // Fill the erased blur region with the blurred version
+  resultCtx.drawImage(blurredCanvas, 0, 0)
+
+  // Draw final result to main canvas (preserves background)
+  ctx.drawImage(resultCanvas, 0, 0, width, height)
+}
+
 /** Main render function. Draws brand shape to the given canvas. */
 export function render(canvas: HTMLCanvasElement, config: RenderConfig): void {
   const ctx = canvas.getContext('2d')
@@ -132,16 +202,47 @@ export function render(canvas: HTMLCanvasElement, config: RenderConfig): void {
   const offCtx = offscreen.getContext('2d')!
   offCtx.scale(dpr, dpr)
 
-  switch (config.variant) {
-    case 'wireframe':
-      renderWireframe(offCtx, steps, colours, scaleFactor, translateX, translateY, width, height)
-      break
-    case 'filled':
-      renderFilled(offCtx, steps, colours, config, scaleFactor, translateX, translateY, width, height, vb)
-      break
-    case 'gradient':
-      renderGradient(offCtx, steps, colours, config, scaleFactor, translateX, translateY, width, height, vb)
-      break
+  // --- Per-layer blur path ---
+  const hasLayerBlur = config.blur.layerBlurFrom > 0 || config.blur.layerBlurTo > 0
+
+  if (hasLayerBlur && config.variant !== 'wireframe') {
+    const tempCanvas = new OffscreenCanvas(width * dpr, height * dpr)
+    const tempCtx = tempCanvas.getContext('2d')!
+    tempCtx.scale(dpr, dpr)
+
+    for (let i = 0; i < steps.length; i++) {
+      tempCtx.clearRect(0, 0, width, height)
+
+      const stepIdx = config.stepIndices ? config.stepIndices[i] : i
+      const stepTotal = config.totalStepCount || steps.length
+
+      if (config.variant === 'filled') {
+        renderFilledLayer(tempCtx, steps[i], stepIdx, stepTotal, colours, config, scaleFactor, translateX, translateY, vb)
+      } else {
+        renderGradientLayer(tempCtx, steps[i], stepIdx, stepTotal, i, steps.length, colours, config, scaleFactor, translateX, translateY, vb)
+      }
+
+      const t = steps.length === 1 ? 0 : i / (steps.length - 1)
+      const blurRadius = config.blur.layerBlurTo + (config.blur.layerBlurFrom - config.blur.layerBlurTo) * t
+
+      offCtx.filter = blurRadius > 0 ? `blur(${blurRadius}px)` : 'none'
+      offCtx.drawImage(tempCanvas, 0, 0, width, height)
+      offCtx.filter = 'none'
+    }
+    if (config.variant === 'gradient') offCtx.globalAlpha = 1
+  } else {
+    // --- Standard path (no per-layer blur) ---
+    switch (config.variant) {
+      case 'wireframe':
+        renderWireframe(offCtx, steps, colours, scaleFactor, translateX, translateY, width, height)
+        break
+      case 'filled':
+        renderFilled(offCtx, steps, colours, config, scaleFactor, translateX, translateY, width, height, vb)
+        break
+      case 'gradient':
+        renderGradient(offCtx, steps, colours, config, scaleFactor, translateX, translateY, width, height, vb)
+        break
+    }
   }
 
   // Noise overlay — clipped to shape area (on offscreen canvas)
@@ -159,13 +260,12 @@ export function render(canvas: HTMLCanvasElement, config: RenderConfig): void {
     }
   }
 
-  // Draw offscreen canvas to main canvas, applying blur to the WHOLE image
-  // This blurs shape edges (not just fill inside the clip path)
-  if (config.blur.enabled) {
-    ctx.filter = `blur(${config.blur.radius}px)`
+  // Final compositing: masked blur or direct draw
+  if (config.blur.maskEnabled && config.blur.maskBlurRadius > 0) {
+    applyMaskedBlur(ctx, offscreen, width, height, dpr, config.blur)
+  } else {
+    ctx.drawImage(offscreen, 0, 0, width, height)
   }
-  ctx.drawImage(offscreen, 0, 0, width, height)
-  ctx.filter = 'none'
 }
 
 function renderWireframe(
@@ -199,6 +299,59 @@ function renderWireframe(
   ctx.globalAlpha = 1
 }
 
+/** Render a single filled layer to the given context. */
+function renderFilledLayer(
+  ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
+  step: string,
+  stepIdx: number,
+  stepTotal: number,
+  colours: { current: string; catalyst: string; future: string },
+  config: RenderConfig,
+  scale: number,
+  tx: number,
+  ty: number,
+  vb: number[],
+): void {
+  const [shapeCenterX, shapeCenterY] = pathCentroid(step)
+
+  const { scale: stepScale, offsetX, offsetY } = computeStepTransform(
+    stepIdx, stepTotal, config.align, config.spread, config.scaleFrom, config.scaleTo,
+  )
+  const totalScale = scale * stepScale
+
+  const baseAngle = config.gradientAngle ?? 90
+  const spreadAngle = config.gradientSpread ?? 120
+  const t = stepIdx / stepTotal
+  const angleDeg = baseAngle - (1 - t) * spreadAngle
+  const angleRad = (angleDeg * Math.PI) / 180
+
+  const gcx = shapeCenterX + (config.gradientCenterX ?? 0)
+  const gcy = shapeCenterY + (config.gradientCenterY ?? 0)
+
+  ctx.save()
+
+  const shapeCenterCanvasX = tx + shapeCenterX * scale
+  const shapeCenterCanvasY = ty + shapeCenterY * scale
+  ctx.translate(shapeCenterCanvasX + offsetX, shapeCenterCanvasY + offsetY)
+  ctx.scale(totalScale / scale, totalScale / scale)
+  ctx.translate(-shapeCenterCanvasX, -shapeCenterCanvasY)
+  ctx.translate(tx, ty)
+  ctx.scale(scale, scale)
+
+  ctx.clip(new Path2D(step))
+
+  const conicGradient = ctx.createConicGradient(angleRad, gcx, gcy)
+  conicGradient.addColorStop(0, colours.current)
+  conicGradient.addColorStop(0.293, colours.future)
+  conicGradient.addColorStop(0.459, colours.catalyst)
+  conicGradient.addColorStop(1, colours.current)
+
+  ctx.fillStyle = conicGradient
+  ctx.fillRect(-50, -50, vb[2] + 100, vb[3] + 100)
+
+  ctx.restore()
+}
+
 function renderFilled(
   ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
   steps: string[],
@@ -211,54 +364,68 @@ function renderFilled(
   _height: number,
   vb: number[],
 ): void {
-  // Figma pattern: each step gets its OWN conic gradient, clipped to its shape.
-  // The gradient fills the entire shape independently per step.
   for (let i = 0; i < steps.length; i++) {
-    // Compute gradient center from actual path coordinates (tracks cursor parallax etc.)
-    const [shapeCenterX, shapeCenterY] = pathCentroid(steps[i])
-
     const stepIdx = config.stepIndices ? config.stepIndices[i] : i
     const stepTotal = config.totalStepCount || steps.length
-    const { scale: stepScale, offsetX, offsetY } = computeStepTransform(
-      stepIdx, stepTotal, config.align, config.spread, config.scaleFrom, config.scaleTo,
-    )
-    const totalScale = scale * stepScale
-
-    const baseAngle = config.gradientAngle ?? 90
-    const spreadAngle = config.gradientSpread ?? 120
-    const t = stepIdx / stepTotal
-    const angleDeg = baseAngle - (1 - t) * spreadAngle
-    const angleRad = (angleDeg * Math.PI) / 180
-
-    const gcx = shapeCenterX + (config.gradientCenterX ?? 0)
-    const gcy = shapeCenterY + (config.gradientCenterY ?? 0)
-
-    ctx.save()
-
-    const shapeCenterCanvasX = tx + shapeCenterX * scale
-    const shapeCenterCanvasY = ty + shapeCenterY * scale
-    ctx.translate(shapeCenterCanvasX + offsetX, shapeCenterCanvasY + offsetY)
-    ctx.scale(totalScale / scale, totalScale / scale) // stepScale only (base scale applied below)
-    ctx.translate(-shapeCenterCanvasX, -shapeCenterCanvasY)
-    ctx.translate(tx, ty)
-    ctx.scale(scale, scale)
-
-    // Clip to THIS step's shape path
-    ctx.clip(new Path2D(steps[i]))
-
-    // Create conic gradient in shape-local space, centered on shape + user offset
-    const conicGradient = ctx.createConicGradient(angleRad, gcx, gcy)
-    conicGradient.addColorStop(0, colours.current)
-    conicGradient.addColorStop(0.293, colours.future)
-    conicGradient.addColorStop(0.459, colours.catalyst)
-    conicGradient.addColorStop(1, colours.current)
-
-    // Fill entire shape bounds — gradient is clipped to shape by ctx.clip()
-    ctx.fillStyle = conicGradient
-    ctx.fillRect(-50, -50, vb[2] + 100, vb[3] + 100)
-
-    ctx.restore()
+    renderFilledLayer(ctx, steps[i], stepIdx, stepTotal, colours, config, scale, tx, ty, vb)
   }
+}
+
+/** Render a single gradient layer to the given context. */
+function renderGradientLayer(
+  ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
+  step: string,
+  stepIdx: number,
+  stepTotal: number,
+  layerIndex: number,
+  layerCount: number,
+  colours: { current: string; catalyst: string; future: string },
+  config: RenderConfig,
+  scale: number,
+  tx: number,
+  ty: number,
+  vb: number[],
+): void {
+  const shapeCenterX = vb[2] / 2
+  const shapeCenterY = vb[3] / 2
+
+  const baseAngle = config.gradientAngle ?? 90
+  const spreadAngle = config.gradientSpread ?? 120
+  const gcx = shapeCenterX + (config.gradientCenterX ?? 0)
+  const gcy = shapeCenterY + (config.gradientCenterY ?? 0)
+
+  const { scale: stepScale, offsetX, offsetY } = computeStepTransform(
+    stepIdx, stepTotal, config.align, config.spread, config.scaleFrom, config.scaleTo,
+  )
+  const t = layerCount === 1 ? 1 : layerIndex / (layerCount - 1)
+  const opacity = t * t
+  const totalScale = scale * stepScale
+
+  const angleDeg = baseAngle - (1 - stepIdx / stepTotal) * spreadAngle
+  const angleRad = (angleDeg * Math.PI) / 180
+
+  ctx.save()
+
+  const shapeCenterCanvasX = tx + shapeCenterX * scale
+  const shapeCenterCanvasY = ty + shapeCenterY * scale
+  ctx.translate(shapeCenterCanvasX + offsetX, shapeCenterCanvasY + offsetY)
+  ctx.scale(totalScale / scale, totalScale / scale)
+  ctx.translate(-shapeCenterCanvasX, -shapeCenterCanvasY)
+  ctx.translate(tx, ty)
+  ctx.scale(scale, scale)
+  ctx.globalAlpha = Math.max(0.05, opacity)
+
+  ctx.clip(new Path2D(step))
+
+  const conicGradient = ctx.createConicGradient(angleRad, gcx, gcy)
+  conicGradient.addColorStop(0, colours.current)
+  conicGradient.addColorStop(0.293, colours.future)
+  conicGradient.addColorStop(0.459, colours.catalyst)
+  conicGradient.addColorStop(1, colours.current)
+
+  ctx.fillStyle = conicGradient
+  ctx.fillRect(-50, -50, vb[2] + 100, vb[3] + 100)
+  ctx.restore()
 }
 
 function renderGradient(
@@ -273,52 +440,10 @@ function renderGradient(
   _height: number,
   vb: number[],
 ): void {
-  const shapeCenterX = vb[2] / 2
-  const shapeCenterY = vb[3] / 2
-
-  const baseAngle = config.gradientAngle ?? 90
-  const spreadAngle = config.gradientSpread ?? 120
-  const gcx = shapeCenterX + (config.gradientCenterX ?? 0)
-  const gcy = shapeCenterY + (config.gradientCenterY ?? 0)
-
   for (let i = 0; i < steps.length; i++) {
     const stepIdx = config.stepIndices ? config.stepIndices[i] : i
     const stepTotal = config.totalStepCount || steps.length
-    const { scale: stepScale, offsetX, offsetY } = computeStepTransform(
-      stepIdx, stepTotal, config.align, config.spread, config.scaleFrom, config.scaleTo,
-    )
-    // More dramatic opacity ramp than filled — back layers nearly transparent,
-    // front layers fully opaque, creating a glowing depth-of-field effect
-    const t = steps.length === 1 ? 1 : i / (steps.length - 1)
-    const opacity = t * t // quadratic: 0, 0.01, 0.04, ... 0.64, 1.0
-    const totalScale = scale * stepScale
-
-    const angleDeg = baseAngle - (1 - stepIdx / stepTotal) * spreadAngle
-    const angleRad = (angleDeg * Math.PI) / 180
-
-    ctx.save()
-
-    // Scale from shape center, not top-left
-    const shapeCenterCanvasX = tx + shapeCenterX * scale
-    const shapeCenterCanvasY = ty + shapeCenterY * scale
-    ctx.translate(shapeCenterCanvasX + offsetX, shapeCenterCanvasY + offsetY)
-    ctx.scale(totalScale / scale, totalScale / scale)
-    ctx.translate(-shapeCenterCanvasX, -shapeCenterCanvasY)
-    ctx.translate(tx, ty)
-    ctx.scale(scale, scale)
-    ctx.globalAlpha = Math.max(0.05, opacity)
-
-    ctx.clip(new Path2D(steps[i]))
-
-    const conicGradient = ctx.createConicGradient(angleRad, gcx, gcy)
-    conicGradient.addColorStop(0, colours.current)
-    conicGradient.addColorStop(0.293, colours.future)
-    conicGradient.addColorStop(0.459, colours.catalyst)
-    conicGradient.addColorStop(1, colours.current)
-
-    ctx.fillStyle = conicGradient
-    ctx.fillRect(-50, -50, vb[2] + 100, vb[3] + 100)
-    ctx.restore()
+    renderGradientLayer(ctx, steps[i], stepIdx, stepTotal, i, steps.length, colours, config, scale, tx, ty, vb)
   }
   ctx.globalAlpha = 1
 }

@@ -27,14 +27,19 @@ export class BrandShape extends LitElement {
     background: { type: String },
     variant: { type: String },
     noiseEnabled: { type: Boolean, attribute: 'noise' },
-    blurEnabled: { type: Boolean, attribute: 'blur' },
+    layerBlurFrom: { type: Number, attribute: 'layer-blur-from' },
+    layerBlurTo: { type: Number, attribute: 'layer-blur-to' },
+    maskBlurEnabled: { type: Boolean, attribute: 'mask-enabled' },
+    maskAngle: { type: Number, attribute: 'mask-angle' },
+    maskPosition: { type: Number, attribute: 'mask-position' },
+    maskHardness: { type: Number, attribute: 'mask-hardness' },
+    maskBlurRadius: { type: Number, attribute: 'mask-blur-radius' },
     animateEnabled: { type: Boolean, attribute: 'animate' },
     trigger: { type: String },
     duration: { type: Number },
     align: { type: String },
     spread: { type: Number },
     noiseOpacity: { type: Number, attribute: 'noise-opacity' },
-    blurRadius: { type: Number, attribute: 'blur-radius' },
     scaleFrom: { type: Number, attribute: 'scale-from' },
     scaleTo: { type: Number, attribute: 'scale-to' },
     gradientAngle: { type: Number, attribute: 'gradient-angle' },
@@ -52,14 +57,19 @@ export class BrandShape extends LitElement {
   background = 'transparent'
   variant: Variant = 'filled'
   noiseEnabled = false
-  blurEnabled = false
+  layerBlurFrom = 0
+  layerBlurTo = 0
+  maskBlurEnabled = false
+  maskAngle = 0
+  maskPosition = 0.5
+  maskHardness = 0.5
+  maskBlurRadius = 10
   animateEnabled = false
   trigger: 'enter' | 'click' = 'enter'
   duration = 1500
   align: Alignment = 'center'
   spread = 1
   noiseOpacity = 0.12
-  blurRadius = 2
   scaleFrom = 1.15
   scaleTo = 0.95
   gradientAngle = 90
@@ -109,8 +119,13 @@ export class BrandShape extends LitElement {
         size: DEFAULT_NOISE_CONFIG.size,
       },
       blur: {
-        enabled: this.blurEnabled,
-        radius: this.blurRadius,
+        layerBlurFrom: this.layerBlurFrom,
+        layerBlurTo: this.layerBlurTo,
+        maskEnabled: this.maskBlurEnabled,
+        maskAngle: this.maskAngle,
+        maskPosition: this.maskPosition,
+        maskHardness: this.maskHardness,
+        maskBlurRadius: this.maskBlurRadius,
       },
       align: this.align,
       spread: this.spread,

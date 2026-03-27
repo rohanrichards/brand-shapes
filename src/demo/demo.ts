@@ -28,9 +28,16 @@ const config = {
   background: '#000000',
   variant: 'filled' as 'wireframe' | 'filled' | 'gradient',
   noise: true,
-  blur: false,
   noiseOpacity: 0.08,
-  blurRadius: 2,
+  // Blur controls
+  layerBlurEnabled: false,
+  layerBlurFrom: 0,
+  layerBlurTo: 0,
+  maskBlurEnabled: false,
+  maskAngle: 0,
+  maskPosition: 0.5,
+  maskHardness: 0.5,
+  maskBlurRadius: 10,
   align: 'right' as 'left' | 'right' | 'top' | 'bottom' | 'center',
   spread: 1.2,
   scaleFrom: 1.15,
@@ -100,8 +107,13 @@ function buildRenderConfig(customSteps?: string[]): RenderConfig {
       size: DEFAULT_NOISE_CONFIG.size,
     },
     blur: {
-      enabled: config.blur,
-      radius: config.blurRadius,
+      layerBlurFrom: config.layerBlurEnabled ? config.layerBlurFrom : 0,
+      layerBlurTo: config.layerBlurEnabled ? config.layerBlurTo : 0,
+      maskEnabled: config.maskBlurEnabled,
+      maskAngle: config.maskAngle,
+      maskPosition: config.maskPosition,
+      maskHardness: config.maskHardness,
+      maskBlurRadius: config.maskBlurRadius,
     },
     align: config.align,
     spread: config.spread,
@@ -595,9 +607,74 @@ addLockToggle(colourFolder.add(config, 'background', backgroundOptions).name('Ba
 const effectsFolder = gui.addFolder('Effects')
 addLockToggle(effectsFolder.add(config, 'variant', ['wireframe', 'filled', 'gradient']).name('Variant').onChange(onConfigChange), 'variant')
 effectsFolder.add(config, 'noise').name('Noise').onChange(onConfigChange)
-effectsFolder.add(config, 'blur').name('Blur').onChange(onConfigChange)
 effectsFolder.add(config, 'noiseOpacity', 0, 0.5, 0.01).name('Noise Opacity').onChange(onConfigChange)
-effectsFolder.add(config, 'blurRadius', 0, 10, 0.5).name('Blur Radius').onChange(onConfigChange)
+
+const blurFolder = gui.addFolder('Blur')
+blurFolder.add(config, 'layerBlurEnabled').name('Layer Enabled').onChange(onConfigChange)
+blurFolder.add(config, 'layerBlurFrom', 0, 30, 0.5).name('Layer From').onChange(onConfigChange)
+blurFolder.add(config, 'layerBlurTo', 0, 30, 0.5).name('Layer To').onChange(onConfigChange)
+blurFolder.add(config, 'maskBlurEnabled').name('Mask Enabled').onChange(onConfigChange)
+const maskAngleCtrl = blurFolder.add(config, 'maskAngle', 0, 360, 1).name('Mask Angle').onChange(onMaskSliderChange)
+const maskPosCtrl = blurFolder.add(config, 'maskPosition', 0, 1, 0.01).name('Mask Position').onChange(onMaskSliderChange)
+const maskHardCtrl = blurFolder.add(config, 'maskHardness', 0, 1, 0.01).name('Mask Hardness').onChange(onMaskSliderChange)
+const maskRadCtrl = blurFolder.add(config, 'maskBlurRadius', 0, 30, 0.5).name('Mask Radius').onChange(onMaskSliderChange)
+for (const ctrl of [maskAngleCtrl, maskPosCtrl, maskHardCtrl, maskRadCtrl]) {
+  ctrl.domElement.addEventListener('pointerdown', onMaskSliderDown)
+}
+
+// Mask overlay — shows the mask gradient region while mask is enabled
+const overlayCanvas = document.createElement('canvas')
+overlayCanvas.id = 'blur-mask-overlay'
+overlayCanvas.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;opacity:0;transition:opacity 0.15s;z-index:999'
+document.body.appendChild(overlayCanvas)
+
+function drawMaskOverlay() {
+  const w = window.innerWidth
+  const h = window.innerHeight
+  const dpr = window.devicePixelRatio || 1
+  overlayCanvas.width = w * dpr
+  overlayCanvas.height = h * dpr
+  const octx = overlayCanvas.getContext('2d')!
+  octx.scale(dpr, dpr)
+
+  const angleRad = (config.maskAngle * Math.PI) / 180
+  const cx = w / 2, cy = h / 2
+  const len = Math.max(w, h)
+  const dx = Math.cos(angleRad) * len
+  const dy = Math.sin(angleRad) * len
+
+  const grad = octx.createLinearGradient(cx - dx, cy - dy, cx + dx, cy + dy)
+  const pos = config.maskPosition
+  const halfSpread = Math.max(0.001, (1 - config.maskHardness) * 0.5)
+  const s0 = Math.max(0, pos - halfSpread)
+  const s1 = Math.min(1, pos + halfSpread)
+  grad.addColorStop(0, 'rgba(255,0,100,0.3)')
+  grad.addColorStop(s0, 'rgba(255,0,100,0.3)')
+  grad.addColorStop(s1, 'rgba(255,0,100,0)')
+  grad.addColorStop(1, 'rgba(255,0,100,0)')
+
+  octx.clearRect(0, 0, w, h)
+  octx.fillStyle = grad
+  octx.fillRect(0, 0, w, h)
+}
+
+// Show overlay only while interacting with mask sliders
+let maskDragging = false
+function onMaskSliderDown() {
+  maskDragging = true
+  overlayCanvas.style.opacity = '1'
+  drawMaskOverlay()
+}
+function onMaskSliderChange() {
+  onConfigChange()
+  if (maskDragging) drawMaskOverlay()
+}
+window.addEventListener('pointerup', () => {
+  if (maskDragging) {
+    maskDragging = false
+    overlayCanvas.style.opacity = '0'
+  }
+})
 
 const gradientFolder = gui.addFolder('Gradient')
 addLockToggle(gradientFolder.add(config, 'gradientAngle', 0, 360, 1).name('Angle').onChange(onConfigChange), 'gradientAngle')
@@ -758,6 +835,12 @@ function exportSVG() {
     const scaleFactor = Math.min(screenW / vb[2], screenH / vb[3]) * 0.8
     const strokeWidth = config.variant === 'wireframe' ? 1.5 / scaleFactor : undefined
 
+    const hasLayerBlur = config.layerBlurEnabled && (config.layerBlurFrom > 0 || config.layerBlurTo > 0)
+    const t = paths.length === 1 ? 0 : i / (paths.length - 1)
+    const blurRadius = hasLayerBlur
+      ? config.layerBlurTo + (config.layerBlurFrom - config.layerBlurTo) * t
+      : 0
+
     return {
       path,
       centroid: cent,
@@ -765,6 +848,7 @@ function exportSVG() {
       opacity,
       strokeWidth,
       gradientImage,
+      blurRadius,
     }
   })
 
