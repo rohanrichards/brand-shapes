@@ -101,8 +101,16 @@ describe('noise and blur configs', () => {
     expect(DEFAULT_NOISE_CONFIG.size).toBe(256)
   })
 
-  it('DEFAULT_BLUR_CONFIG has expected values', () => {
-    expect(DEFAULT_BLUR_CONFIG.enabled).toBe(false)
-    expect(DEFAULT_BLUR_CONFIG.radius).toBe(2)
+  it('DEFAULT_BLUR_CONFIG has expected per-layer blur values', () => {
+    expect(DEFAULT_BLUR_CONFIG.layerBlurFrom).toBe(0)
+    expect(DEFAULT_BLUR_CONFIG.layerBlurTo).toBe(0)
+  })
+
+  it('DEFAULT_BLUR_CONFIG has expected mask blur values', () => {
+    expect(DEFAULT_BLUR_CONFIG.maskEnabled).toBe(false)
+    expect(DEFAULT_BLUR_CONFIG.maskAngle).toBe(0)
+    expect(DEFAULT_BLUR_CONFIG.maskPosition).toBe(0.5)
+    expect(DEFAULT_BLUR_CONFIG.maskHardness).toBe(0.5)
+    expect(DEFAULT_BLUR_CONFIG.maskBlurRadius).toBe(10)
   })
 })
