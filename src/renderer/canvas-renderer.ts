@@ -132,16 +132,47 @@ export function render(canvas: HTMLCanvasElement, config: RenderConfig): void {
   const offCtx = offscreen.getContext('2d')!
   offCtx.scale(dpr, dpr)
 
-  switch (config.variant) {
-    case 'wireframe':
-      renderWireframe(offCtx, steps, colours, scaleFactor, translateX, translateY, width, height)
-      break
-    case 'filled':
-      renderFilled(offCtx, steps, colours, config, scaleFactor, translateX, translateY, width, height, vb)
-      break
-    case 'gradient':
-      renderGradient(offCtx, steps, colours, config, scaleFactor, translateX, translateY, width, height, vb)
-      break
+  // --- Per-layer blur path ---
+  const hasLayerBlur = config.blur.layerBlurFrom > 0 || config.blur.layerBlurTo > 0
+
+  if (hasLayerBlur && config.variant !== 'wireframe') {
+    const tempCanvas = new OffscreenCanvas(width * dpr, height * dpr)
+    const tempCtx = tempCanvas.getContext('2d')!
+    tempCtx.scale(dpr, dpr)
+
+    for (let i = 0; i < steps.length; i++) {
+      tempCtx.clearRect(0, 0, width, height)
+
+      const stepIdx = config.stepIndices ? config.stepIndices[i] : i
+      const stepTotal = config.totalStepCount || steps.length
+
+      if (config.variant === 'filled') {
+        renderFilledLayer(tempCtx, steps[i], stepIdx, stepTotal, colours, config, scaleFactor, translateX, translateY, vb)
+      } else {
+        renderGradientLayer(tempCtx, steps[i], stepIdx, stepTotal, i, steps.length, colours, config, scaleFactor, translateX, translateY, vb)
+      }
+
+      const t = steps.length === 1 ? 0 : i / (steps.length - 1)
+      const blurRadius = config.blur.layerBlurFrom + (config.blur.layerBlurTo - config.blur.layerBlurFrom) * t
+
+      offCtx.filter = blurRadius > 0 ? `blur(${blurRadius}px)` : 'none'
+      offCtx.drawImage(tempCanvas, 0, 0, width, height)
+      offCtx.filter = 'none'
+    }
+    if (config.variant === 'gradient') offCtx.globalAlpha = 1
+  } else {
+    // --- Standard path (no per-layer blur) ---
+    switch (config.variant) {
+      case 'wireframe':
+        renderWireframe(offCtx, steps, colours, scaleFactor, translateX, translateY, width, height)
+        break
+      case 'filled':
+        renderFilled(offCtx, steps, colours, config, scaleFactor, translateX, translateY, width, height, vb)
+        break
+      case 'gradient':
+        renderGradient(offCtx, steps, colours, config, scaleFactor, translateX, translateY, width, height, vb)
+        break
+    }
   }
 
   // Noise overlay — clipped to shape area (on offscreen canvas)
@@ -159,13 +190,8 @@ export function render(canvas: HTMLCanvasElement, config: RenderConfig): void {
     }
   }
 
-  // Draw offscreen canvas to main canvas, applying blur to the WHOLE image
-  // This blurs shape edges (not just fill inside the clip path)
-  if (config.blur.enabled) {
-    ctx.filter = `blur(${config.blur.radius}px)`
-  }
+  // Final compositing: draw offscreen to main canvas
   ctx.drawImage(offscreen, 0, 0, width, height)
-  ctx.filter = 'none'
 }
 
 function renderWireframe(
