@@ -28,9 +28,15 @@ const config = {
   background: '#000000',
   variant: 'filled' as 'wireframe' | 'filled' | 'gradient',
   noise: true,
-  blur: false,
   noiseOpacity: 0.08,
-  blurRadius: 2,
+  // Blur controls
+  layerBlurFrom: 0,
+  layerBlurTo: 0,
+  maskBlurEnabled: false,
+  maskAngle: 0,
+  maskPosition: 0.5,
+  maskHardness: 0.5,
+  maskBlurRadius: 10,
   align: 'right' as 'left' | 'right' | 'top' | 'bottom' | 'center',
   spread: 1.2,
   scaleFrom: 1.15,
@@ -76,6 +82,12 @@ const locks = {
   gradientSpread: false,
   gradientCenterX: false,
   gradientCenterY: false,
+  layerBlurFrom: false,
+  layerBlurTo: false,
+  maskAngle: false,
+  maskPosition: false,
+  maskHardness: false,
+  maskBlurRadius: false,
 }
 
 const canvas = document.getElementById('canvas') as HTMLCanvasElement
@@ -100,8 +112,13 @@ function buildRenderConfig(customSteps?: string[]): RenderConfig {
       size: DEFAULT_NOISE_CONFIG.size,
     },
     blur: {
-      enabled: config.blur,
-      radius: config.blurRadius,
+      layerBlurFrom: config.layerBlurFrom,
+      layerBlurTo: config.layerBlurTo,
+      maskEnabled: config.maskBlurEnabled,
+      maskAngle: config.maskAngle,
+      maskPosition: config.maskPosition,
+      maskHardness: config.maskHardness,
+      maskBlurRadius: config.maskBlurRadius,
     },
     align: config.align,
     spread: config.spread,
@@ -560,6 +577,12 @@ function randomize() {
   if (!locks.gradientSpread) config.gradientSpread = Math.floor(Math.random() * 301) + 30
   if (!locks.gradientCenterX) config.gradientCenterX = Math.round((Math.random() * 200 - 100) * 10) / 10
   if (!locks.gradientCenterY) config.gradientCenterY = Math.round((Math.random() * 200 - 100) * 10) / 10
+  if (!locks.layerBlurFrom) config.layerBlurFrom = Math.round(Math.random() * 15 * 10) / 10
+  if (!locks.layerBlurTo) config.layerBlurTo = Math.round(Math.random() * 5 * 10) / 10
+  if (!locks.maskAngle) config.maskAngle = Math.floor(Math.random() * 360)
+  if (!locks.maskPosition) config.maskPosition = Math.round(Math.random() * 100) / 100
+  if (!locks.maskHardness) config.maskHardness = Math.round(Math.random() * 100) / 100
+  if (!locks.maskBlurRadius) config.maskBlurRadius = Math.round(Math.random() * 20 * 10) / 10
   gui.controllersRecursive().forEach(c => c.updateDisplay())
   onConfigChange()
 }
@@ -595,9 +618,67 @@ addLockToggle(colourFolder.add(config, 'background', backgroundOptions).name('Ba
 const effectsFolder = gui.addFolder('Effects')
 addLockToggle(effectsFolder.add(config, 'variant', ['wireframe', 'filled', 'gradient']).name('Variant').onChange(onConfigChange), 'variant')
 effectsFolder.add(config, 'noise').name('Noise').onChange(onConfigChange)
-effectsFolder.add(config, 'blur').name('Blur').onChange(onConfigChange)
 effectsFolder.add(config, 'noiseOpacity', 0, 0.5, 0.01).name('Noise Opacity').onChange(onConfigChange)
-effectsFolder.add(config, 'blurRadius', 0, 10, 0.5).name('Blur Radius').onChange(onConfigChange)
+
+const blurFolder = gui.addFolder('Blur')
+addLockToggle(blurFolder.add(config, 'layerBlurFrom', 0, 30, 0.5).name('Layer From').onChange(onConfigChange), 'layerBlurFrom')
+addLockToggle(blurFolder.add(config, 'layerBlurTo', 0, 30, 0.5).name('Layer To').onChange(onConfigChange), 'layerBlurTo')
+blurFolder.add(config, 'maskBlurEnabled').name('Mask Enabled').onChange(onConfigChange)
+addLockToggle(blurFolder.add(config, 'maskAngle', 0, 360, 1).name('Mask Angle').onChange(onConfigChange), 'maskAngle')
+addLockToggle(blurFolder.add(config, 'maskPosition', 0, 1, 0.01).name('Mask Position').onChange(onConfigChange), 'maskPosition')
+addLockToggle(blurFolder.add(config, 'maskHardness', 0, 1, 0.01).name('Mask Hardness').onChange(onConfigChange), 'maskHardness')
+addLockToggle(blurFolder.add(config, 'maskBlurRadius', 0, 30, 0.5).name('Mask Radius').onChange(onConfigChange), 'maskBlurRadius')
+
+// Mask overlay — visible while dragging mask sliders
+const overlayCanvas = document.createElement('canvas')
+overlayCanvas.id = 'blur-mask-overlay'
+overlayCanvas.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;opacity:0;transition:opacity 0.15s'
+document.body.appendChild(overlayCanvas)
+
+function drawMaskOverlay() {
+  const w = overlayCanvas.clientWidth
+  const h = overlayCanvas.clientHeight
+  const dpr = window.devicePixelRatio || 1
+  overlayCanvas.width = w * dpr
+  overlayCanvas.height = h * dpr
+  const octx = overlayCanvas.getContext('2d')!
+  octx.scale(dpr, dpr)
+
+  const angleRad = (config.maskAngle * Math.PI) / 180
+  const cx = w / 2, cy = h / 2
+  const len = Math.max(w, h)
+  const dx = Math.cos(angleRad) * len
+  const dy = Math.sin(angleRad) * len
+
+  const grad = octx.createLinearGradient(cx - dx, cy - dy, cx + dx, cy + dy)
+  const pos = config.maskPosition
+  const halfSpread = Math.max(0.001, (1 - config.maskHardness) * 0.5)
+  const s0 = Math.max(0, pos - halfSpread)
+  const s1 = Math.min(1, pos + halfSpread)
+  grad.addColorStop(0, 'rgba(255,0,100,0.3)')
+  grad.addColorStop(s0, 'rgba(255,0,100,0.3)')
+  grad.addColorStop(s1, 'rgba(255,0,100,0)')
+  grad.addColorStop(1, 'rgba(255,0,100,0)')
+
+  octx.clearRect(0, 0, w, h)
+  octx.fillStyle = grad
+  octx.fillRect(0, 0, w, h)
+}
+
+const maskControllerNames = ['maskAngle', 'maskPosition', 'maskHardness', 'maskBlurRadius']
+blurFolder.controllersRecursive().forEach(c => {
+  if (maskControllerNames.includes(c.property)) {
+    const el = c.domElement
+    el.addEventListener('pointerdown', () => {
+      overlayCanvas.style.opacity = '1'
+      drawMaskOverlay()
+    })
+    el.addEventListener('input', () => { drawMaskOverlay() })
+  }
+})
+window.addEventListener('pointerup', () => {
+  overlayCanvas.style.opacity = '0'
+})
 
 const gradientFolder = gui.addFolder('Gradient')
 addLockToggle(gradientFolder.add(config, 'gradientAngle', 0, 360, 1).name('Angle').onChange(onConfigChange), 'gradientAngle')
