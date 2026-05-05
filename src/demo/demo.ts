@@ -169,7 +169,12 @@ function renderLayerPoints(layerPoints: Point[][], indices: number[]) {
   const rc = buildRenderConfig(paths)
   rc.stepIndices = indices
   rc.totalStepCount = config.steps
-  render(canvas, rc)
+  const dpr = window.devicePixelRatio || 1
+  render(canvas, rc, {
+    width: canvas.clientWidth,
+    height: canvas.clientHeight,
+    dpr,
+  })
 }
 
 // --- Static render ---

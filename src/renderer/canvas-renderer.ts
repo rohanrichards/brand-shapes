@@ -23,6 +23,14 @@ import {
 export type Variant = 'wireframe' | 'filled' | 'gradient'
 export type { Alignment } from '../core/transforms'
 
+export interface RenderTarget {
+  /** Logical canvas pixels (CSS px). Backing-store size is width * dpr. */
+  width: number
+  height: number
+  /** Backing-store density. 1 for export at absolute pixel sizes; window.devicePixelRatio for live preview. */
+  dpr: number
+}
+
 export interface RenderConfig {
   from: ShapeName
   to: ShapeName
@@ -158,13 +166,11 @@ function applyMaskedBlur(
 }
 
 /** Main render function. Draws brand shape to the given canvas. */
-export function render(canvas: HTMLCanvasElement, config: RenderConfig): void {
+export function render(canvas: HTMLCanvasElement, config: RenderConfig, target: RenderTarget): void {
   const ctx = canvas.getContext('2d')
   if (!ctx) return
 
-  const dpr = window.devicePixelRatio || 1
-  const width = canvas.clientWidth
-  const height = canvas.clientHeight
+  const { width, height, dpr } = target
   canvas.width = width * dpr
   canvas.height = height * dpr
   ctx.scale(dpr, dpr)

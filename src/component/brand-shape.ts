@@ -142,7 +142,12 @@ export class BrandShape extends LitElement {
     if (!this._canvas) return
     const rect = this.getBoundingClientRect()
     if (rect.width === 0 || rect.height === 0) return
-    render(this._canvas, this._buildConfig())
+    const dpr = window.devicePixelRatio || 1
+    render(this._canvas, this._buildConfig(), {
+      width: rect.width,
+      height: rect.height,
+      dpr,
+    })
   }
 }
 
