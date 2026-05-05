@@ -19,6 +19,13 @@ import {
   DEFAULT_NOISE_CONFIG,
   DEFAULT_BLUR_CONFIG,
 } from '../core/effects'
+import {
+  LOGO_PATHS,
+  LOGO_FILL,
+  LOGO_VIEWBOX,
+  computeLogoPlacement,
+  type LogoColor,
+} from '../core/logo'
 
 export type Variant = 'wireframe' | 'filled' | 'gradient'
 export type { Alignment } from '../core/transforms'
@@ -65,6 +72,8 @@ export interface RenderConfig {
   gradientCenterX?: number
   /** Gradient center Y offset from centroid in viewBox units (default 0). */
   gradientCenterY?: number
+  /** When set, draws the Portable logo overlay in the bottom-left. */
+  logo?: { color: LogoColor }
 }
 
 export const DEFAULT_CONFIG: RenderConfig = {
@@ -163,6 +172,34 @@ function applyMaskedBlur(
 
   // Draw final result to main canvas (preserves background)
   ctx.drawImage(resultCanvas, 0, 0, width, height)
+}
+
+/**
+ * Draws the Portable logo at the bottom-left, scaled proportionally to canvas dims.
+ * Path data is fixed (Portable brand assets, see src/core/logo.ts).
+ */
+function drawLogo(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  color: LogoColor,
+): void {
+  const placement = computeLogoPlacement(width, height)
+  const sx = placement.width / LOGO_VIEWBOX.width
+  const sy = placement.height / LOGO_VIEWBOX.height
+
+  ctx.save()
+  ctx.translate(placement.x, placement.y)
+  ctx.scale(sx, sy)
+  ctx.fillStyle = LOGO_FILL[color]
+
+  const body = new Path2D(LOGO_PATHS.body)
+  ctx.fill(body, 'evenodd')
+
+  const slash = new Path2D(LOGO_PATHS.slash)
+  ctx.fill(slash)
+
+  ctx.restore()
 }
 
 /** Main render function. Draws brand shape to the given canvas. */
@@ -271,6 +308,10 @@ export function render(canvas: HTMLCanvasElement, config: RenderConfig, target: 
     applyMaskedBlur(ctx, offscreen, width, height, dpr, config.blur)
   } else {
     ctx.drawImage(offscreen, 0, 0, width, height)
+  }
+
+  if (config.logo) {
+    drawLogo(ctx, width, height, config.logo.color)
   }
 }
 
