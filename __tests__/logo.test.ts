@@ -102,3 +102,40 @@ describe('computeLogoPlacement — wordmark', () => {
     expect(wordmark.padding).toBe(symbol.padding)
   })
 })
+
+describe('computeLogoPlacement — user scale multiplier', () => {
+  it('userScale=1 (default) matches the no-arg behaviour', () => {
+    const a = computeLogoPlacement('symbol', 1920, 1080)
+    const b = computeLogoPlacement('symbol', 1920, 1080, 1)
+    expect(a).toEqual(b)
+  })
+
+  it('userScale=2 doubles logo size but leaves padding unchanged', () => {
+    const baseline = computeLogoPlacement('symbol', 1920, 1080)
+    const scaled = computeLogoPlacement('symbol', 1920, 1080, 2)
+    expect(scaled.width).toBe(baseline.width * 2)
+    expect(scaled.height).toBe(baseline.height * 2)
+    expect(scaled.padding).toBe(baseline.padding)   // padding stays canvas-driven
+    expect(scaled.x).toBe(baseline.x)               // x = padding
+    // y must shift up because logo is taller
+    expect(scaled.y).toBe(1080 - baseline.padding - baseline.height * 2)
+  })
+
+  it('userScale=0.5 halves the logo (still anchored bottom-left at the same padding)', () => {
+    const p = computeLogoPlacement('wordmark', 1920, 1080, 0.5)
+    expect(p.width).toBe(90)    // 180 * 0.5
+    expect(p.height).toBe(16)   // 32 * 0.5
+    expect(p.padding).toBe(48)  // unchanged
+    expect(p.x).toBe(48)
+    expect(p.y).toBe(1080 - 48 - 16)
+  })
+
+  it('combines user and canvas scale multiplicatively', () => {
+    // 4K canvas (canvas scale=2) + userScale=1.5 -> total scale 3
+    const p = computeLogoPlacement('symbol', 3840, 2160, 1.5)
+    expect(p.scale).toBeCloseTo(3, 6)
+    expect(p.width).toBeCloseTo(300, 6)   // 100 * 3
+    expect(p.height).toBeCloseTo(264, 6)  // 88 * 3
+    expect(p.padding).toBe(96)            // canvas-driven (2 * 48)
+  })
+})

@@ -71,7 +71,7 @@ export interface RenderConfig {
   /** Gradient center Y offset from centroid in viewBox units (default 0). */
   gradientCenterY?: number
   /** When set, draws the Portable logo overlay in the bottom-left. */
-  logo?: { style: LogoStyle; color: string }
+  logo?: { style: LogoStyle; color: string; opacity?: number; scale?: number }
 }
 
 export const DEFAULT_CONFIG: RenderConfig = {
@@ -173,8 +173,11 @@ function applyMaskedBlur(
 }
 
 /**
- * Draws the Portable logo (symbol or wordmark) at the bottom-left, scaled
- * proportionally to canvas dims. Color is any CSS color string (hex or rgba).
+ * Draws the Portable logo (symbol or wordmark) at the bottom-left.
+ *
+ * When opacity < 1 we composite to an offscreen canvas first so overlapping
+ * paths (e.g. the slash across the P) merge into one shape before alpha is
+ * applied — otherwise overlap regions appear brighter than the rest.
  */
 function drawLogo(
   ctx: CanvasRenderingContext2D,
@@ -182,23 +185,50 @@ function drawLogo(
   height: number,
   style: LogoStyle,
   color: string,
+  opacity: number,
+  userScale: number,
 ): void {
   const variant = LOGO_VARIANTS[style]
-  const placement = computeLogoPlacement(style, width, height)
+  const placement = computeLogoPlacement(style, width, height, userScale)
   const sx = placement.width / variant.viewBox.width
   const sy = placement.height / variant.viewBox.height
+  const alpha = Math.max(0, Math.min(1, opacity))
+  if (alpha === 0) return
 
-  ctx.save()
-  ctx.translate(placement.x, placement.y)
-  ctx.scale(sx, sy)
-  ctx.fillStyle = color
-
-  for (const path of variant.paths) {
-    const p2d = new Path2D(path.d)
-    if (path.fillRule === 'evenodd') ctx.fill(p2d, 'evenodd')
-    else ctx.fill(p2d)
+  if (alpha === 1) {
+    // Fast path: draw directly to main context
+    ctx.save()
+    ctx.translate(placement.x, placement.y)
+    ctx.scale(sx, sy)
+    ctx.fillStyle = color
+    for (const path of variant.paths) {
+      const p2d = new Path2D(path.d)
+      if (path.fillRule === 'evenodd') ctx.fill(p2d, 'evenodd')
+      else ctx.fill(p2d)
+    }
+    ctx.restore()
+    return
   }
 
+  // Composite paths to an offscreen at full alpha so the union is a single
+  // solid shape, then drawImage to main with globalAlpha.
+  const offW = Math.max(1, Math.ceil(placement.width))
+  const offH = Math.max(1, Math.ceil(placement.height))
+  const off = new OffscreenCanvas(offW, offH)
+  const offCtx = off.getContext('2d')
+  if (!offCtx) return
+
+  offCtx.scale(sx, sy)
+  offCtx.fillStyle = color
+  for (const path of variant.paths) {
+    const p2d = new Path2D(path.d)
+    if (path.fillRule === 'evenodd') offCtx.fill(p2d, 'evenodd')
+    else offCtx.fill(p2d)
+  }
+
+  ctx.save()
+  ctx.globalAlpha = alpha
+  ctx.drawImage(off, placement.x, placement.y)
   ctx.restore()
 }
 
@@ -311,7 +341,13 @@ export function render(canvas: HTMLCanvasElement, config: RenderConfig, target: 
   }
 
   if (config.logo) {
-    drawLogo(ctx, width, height, config.logo.style, config.logo.color)
+    drawLogo(
+      ctx, width, height,
+      config.logo.style,
+      config.logo.color,
+      config.logo.opacity ?? 1,
+      config.logo.scale ?? 1,
+    )
   }
 }
 

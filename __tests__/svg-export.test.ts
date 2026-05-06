@@ -217,6 +217,29 @@ describe('generateSVG — logo overlay', () => {
     expect(svg).toContain('fill="rgba(255, 0, 128, 0.5)"')
   })
 
+  it('omits opacity attribute when opacity defaults to 1 (or is unset)', () => {
+    const svg = generateSVG(makeWireframeConfig({
+      width: 1920, height: 1080,
+      logo: { style: 'symbol', color: '#181818' },
+    }))
+    // Logo group should not carry opacity attr at full alpha
+    const logoGroupMatch = svg.match(/<g transform="translate\(48[^>]*>/)
+    expect(logoGroupMatch).toBeTruthy()
+    expect(logoGroupMatch![0]).not.toContain('opacity=')
+  })
+
+  it('applies group opacity (not per-path) when opacity < 1, so overlaps merge', () => {
+    const svg = generateSVG(makeWireframeConfig({
+      width: 1920, height: 1080,
+      logo: { style: 'symbol', color: '#181818', opacity: 0.5 },
+    }))
+    expect(svg).toContain('opacity="0.5"')
+    // Per-path fill stays solid hex (no rgba alpha leak), so group-opacity
+    // is the sole alpha source — guarantees the overlap merge.
+    expect(svg).toContain('fill="#181818"')
+    expect(svg).not.toContain('rgba(')
+  })
+
   it('emits logo after the viewport-clipped shape group (so logo is not clipped)', () => {
     const svg = generateSVG(makeWireframeConfig({
       width: 1920, height: 1080,

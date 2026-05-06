@@ -45,22 +45,25 @@ export interface SVGExportConfig {
   /** Size of the noise tile in pixels */
   noiseTileSize?: number
   /** When set, embeds the Portable logo overlay in the bottom-left. */
-  logo?: { style: LogoStyle; color: string }
+  logo?: { style: LogoStyle; color: string; opacity?: number; scale?: number }
 }
 
 /** Build the inline logo block. Empty string when config.logo is unset. */
 function logoBlock(config: SVGExportConfig): string {
   if (!config.logo) return ''
-  const { style, color } = config.logo
+  const { style, color, opacity = 1, scale = 1 } = config.logo
   const variant = LOGO_VARIANTS[style]
-  const placement = computeLogoPlacement(style, config.width, config.height)
+  const placement = computeLogoPlacement(style, config.width, config.height, scale)
   const sx = placement.width / variant.viewBox.width
   const sy = placement.height / variant.viewBox.height
+  // Group `opacity` (NOT fill-opacity) renders the group to an isolated buffer
+  // before fading, so overlapping paths merge before alpha is applied.
+  const opacityAttr = opacity < 1 ? ` opacity="${opacity}"` : ''
   const paths = variant.paths.map(p => {
     const ruleAttr = p.fillRule === 'evenodd' ? ' fill-rule="evenodd"' : ''
     return `    <path${ruleAttr} d="${p.d}" fill="${color}"/>`
   }).join('\n')
-  return `\n  <g transform="translate(${placement.x}, ${placement.y}) scale(${sx}, ${sy})">
+  return `\n  <g transform="translate(${placement.x}, ${placement.y}) scale(${sx}, ${sy})"${opacityAttr}>
 ${paths}
   </g>`
 }

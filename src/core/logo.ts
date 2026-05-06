@@ -82,21 +82,25 @@ export interface LogoPlacement {
 
 /**
  * Place the logo (either variant) at bottom-left, scaled proportionally to
- * the export canvas. scale = min(W/1920, H/1080).
+ * the export canvas. Canvas-driven scale = min(W/1920, H/1080); user scale
+ * is a multiplier on logo size only (padding stays canvas-driven so the gap
+ * from edges doesn't change as the user resizes the logo).
  */
 export function computeLogoPlacement(
   style: LogoStyle,
   canvasWidth: number,
   canvasHeight: number,
+  userScale: number = 1,
 ): LogoPlacement {
   const variant = LOGO_VARIANTS[style]
-  const scale = Math.min(
+  const canvasScale = Math.min(
     canvasWidth / LOGO_REFERENCE.width,
     canvasHeight / LOGO_REFERENCE.height,
   )
+  const scale = canvasScale * userScale
   const width = variant.base.width * scale
   const height = variant.base.height * scale
-  const padding = variant.base.padding * scale
+  const padding = variant.base.padding * canvasScale
   return {
     x: padding,
     y: canvasHeight - padding - height,
