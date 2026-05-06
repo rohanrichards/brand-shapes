@@ -156,3 +156,61 @@ describe('generateSVG — gradient variant', () => {
     expect(svg).toContain('opacity="1"')
   })
 })
+
+describe('generateSVG — logo overlay', () => {
+  it('omits logo block when config.logo is undefined', () => {
+    const svg = generateSVG(makeWireframeConfig())
+    expect(svg).not.toContain('M240 4.20461') // slash signature
+    expect(svg).not.toContain('#181818')
+    expect(svg).not.toContain('#FCFCFC')
+  })
+
+  it('includes black logo paths and fill when color=black', () => {
+    const svg = generateSVG(makeWireframeConfig({
+      width: 1920, height: 1080,
+      logo: { color: 'black' },
+    }))
+    expect(svg).toContain('M240 4.20461')  // slash signature
+    expect(svg).toContain('M0 0.996613')    // body signature
+    expect(svg).toContain('fill="#181818"')
+    expect(svg).toContain('fill-rule="evenodd"')
+  })
+
+  it('uses white fill when color=white', () => {
+    const svg = generateSVG(makeWireframeConfig({
+      width: 1920, height: 1080,
+      logo: { color: 'white' },
+    }))
+    expect(svg).toContain('fill="#FCFCFC"')
+    expect(svg).not.toContain('fill="#181818"')
+  })
+
+  it('places logo at bottom-left with template-spec transform at 1920x1080', () => {
+    const svg = generateSVG(makeWireframeConfig({
+      width: 1920, height: 1080,
+      logo: { color: 'black' },
+    }))
+    // scale=1 -> x=48, y=1080-48-88=944. Logo viewBox 240x213 -> sx=100/240≈0.4167, sy=88/213≈0.4131
+    expect(svg).toMatch(/translate\(48,\s*944\)/)
+    expect(svg).toContain('scale(0.41666')
+  })
+
+  it('scales placement proportionally for 4K (3840x2160)', () => {
+    const svg = generateSVG(makeWireframeConfig({
+      width: 3840, height: 2160,
+      logo: { color: 'black' },
+    }))
+    // scale=2 -> x=96, y=2160-96-176=1888
+    expect(svg).toMatch(/translate\(96,\s*1888\)/)
+  })
+
+  it('emits logo after the viewport-clipped shape group (so logo is not clipped)', () => {
+    const svg = generateSVG(makeWireframeConfig({
+      width: 1920, height: 1080,
+      logo: { color: 'black' },
+    }))
+    const clipGroupClose = svg.indexOf('</g>')
+    const logoIdx = svg.indexOf('M240 4.20461')
+    expect(logoIdx).toBeGreaterThan(clipGroupClose)
+  })
+})

@@ -64,6 +64,9 @@ const config = {
   audioSource: 'none' as 'none' | 'mic' | 'system' | 'file',
   audioSensitivity: 1.0,
   preset: 'Organic Flow',
+  // Logo overlay
+  logoEnabled: false,
+  logoColor: 'black' as 'black' | 'white',
 }
 
 const locks = {
@@ -124,6 +127,7 @@ function buildRenderConfig(customSteps?: string[]): RenderConfig {
     gradientCenterX: config.gradientCenterX,
     gradientCenterY: config.gradientCenterY,
     customSteps: customSteps,
+    logo: config.logoEnabled ? { color: config.logoColor } : undefined,
   }
 }
 
@@ -169,7 +173,7 @@ function renderLayerPoints(layerPoints: Point[][], indices: number[]) {
   const rc = buildRenderConfig(paths)
   rc.stepIndices = indices
   rc.totalStepCount = config.steps
-  render(canvas, rc)
+  render(canvas, rc, getPreviewTarget())
 }
 
 // --- Static render ---
@@ -513,11 +517,54 @@ function startCurrentMode() {
   }
 }
 
+// --- Export config (hoisted: read by getPreviewTarget at module init time) ---
+
+const exportConfig = {
+  width: 1920,
+  height: 1080,
+  format: 'png' as 'png' | 'jpg' | 'svg',
+  quality: 0.95,
+  transparentBg: false,
+}
+
 // --- Resize ---
 
+function computePreviewTarget(
+  windowW: number,
+  windowH: number,
+  exportW: number,
+  exportH: number,
+  dpr: number,
+): { width: number; height: number; dpr: number } {
+  const exportAspect = exportW / exportH
+  const windowAspect = windowW / windowH
+  let width: number
+  let height: number
+  if (windowAspect > exportAspect) {
+    height = windowH
+    width = Math.round(height * exportAspect)
+  } else {
+    width = windowW
+    height = Math.round(width / exportAspect)
+  }
+  return { width, height, dpr }
+}
+
+function getPreviewTarget(): { width: number; height: number; dpr: number } {
+  const dpr = window.devicePixelRatio || 1
+  return computePreviewTarget(
+    window.innerWidth,
+    window.innerHeight,
+    exportConfig.width,
+    exportConfig.height,
+    dpr,
+  )
+}
+
 function handleResize() {
-  canvas.style.width = `${window.innerWidth}px`
-  canvas.style.height = `${window.innerHeight}px`
+  const target = getPreviewTarget()
+  canvas.style.width = `${target.width}px`
+  canvas.style.height = `${target.height}px`
   if (!animId) startCurrentMode()
 }
 
@@ -735,39 +782,53 @@ function updateAnimFolders() {
 
 updateAnimFolders()
 
-const exportConfig = {
-  transparentBg: false,
-  highRes: false,
-}
+function exportRaster(format: 'png' | 'jpg'): void {
+  const { width, height, quality, transparentBg } = exportConfig
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+    alert('Export width and height must be positive numbers.')
+    return
+  }
 
-function exportPNG() {
-  if (exportConfig.transparentBg) {
-    const savedBg = config.background
+  const off = document.createElement('canvas')
+  off.width = width
+  off.height = height
+  off.style.width = `${width}px`
+  off.style.height = `${height}px`
+
+  if (!off.getContext('2d')) {
+    alert(`Browser failed to allocate canvas at ${width}x${height}. Try smaller dimensions or a different format.`)
+    return
+  }
+
+  const savedBg = config.background
+  if (transparentBg && format === 'png') {
     config.background = 'transparent'
-    startCurrentMode()
-    requestAnimationFrame(() => {
-      canvas.toBlob((blob) => {
-        if (!blob) return
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = 'brand-shape.png'
-        a.click()
-        URL.revokeObjectURL(url)
-        config.background = savedBg
-        startCurrentMode()
-      }, 'image/png')
-    })
+  }
+
+  try {
+    render(off, buildRenderConfig(), { width, height, dpr: 1 })
+  } finally {
+    config.background = savedBg
+  }
+
+  const mime = format === 'png' ? 'image/png' : 'image/jpeg'
+  const callback = (blob: Blob | null) => {
+    if (!blob) {
+      alert(`Export failed: toBlob returned null. Dimensions ${width}x${height} may be too large.`)
+      return
+    }
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `brand-shape-${width}x${height}.${format}`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  if (format === 'jpg') {
+    off.toBlob(callback, mime, quality)
   } else {
-    canvas.toBlob((blob) => {
-      if (!blob) return
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = 'brand-shape.png'
-      a.click()
-      URL.revokeObjectURL(url)
-    }, 'image/png')
+    off.toBlob(callback, mime)
   }
 }
 
@@ -788,17 +849,17 @@ function exportSVG() {
     future: config.colourCatalyst,
   }
 
-  // Compute base transform first — needed for gradient resolution
-  const screenW = canvas.clientWidth
-  const screenH = canvas.clientHeight
+  // Compute base transform first — needed for gradient resolution.
+  // Use export dims (not live canvas) so SVG output is anchored to user request.
+  const screenW = exportConfig.width
+  const screenH = exportConfig.height
   const baseScale = Math.min(screenW / vb[2], screenH / vb[3]) * 0.8
   const tx = (screenW - vb[2] * baseScale) / 2
   const ty = (screenH - vb[3] * baseScale) / 2
 
-  // Gradient scale factor: baseScale ensures 1:1 screen pixel coverage,
-  // multiply by DPR for retina crispness. High-res mode doubles for print quality.
-  const resMultiplier = exportConfig.highRes ? 2 : 1
-  const gradientScaleFactor = baseScale * (window.devicePixelRatio || 1) * resMultiplier
+  // Gradient scale factor: 1:1 with output pixels (no DPR multiplication —
+  // export dims ARE the pixel count).
+  const gradientScaleFactor = baseScale
 
   const steps: SVGExportStep[] = paths.map((path, i) => {
     const { scale, offsetX, offsetY } = computeStepTransform(
@@ -853,8 +914,7 @@ function exportSVG() {
   })
 
   // Rasterize noise tile matching the canvas renderer's exact algorithm
-  // High-res mode uses larger tile for print quality
-  const noiseTileSize = exportConfig.highRes ? 512 : 256
+  const noiseTileSize = 256
   const noiseImage = config.noise ? rasterizeNoiseTile(noiseTileSize, config.noiseOpacity) : undefined
 
   const svgConfig: SVGExportConfig = {
@@ -871,6 +931,7 @@ function exportSVG() {
     noiseImage,
     noiseTileSize,
     shapeViewBox: vb,
+    logo: config.logoEnabled ? { color: config.logoColor } : undefined,
   }
 
   const svgString = generateSVG(svgConfig)
@@ -878,13 +939,38 @@ function exportSVG() {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = 'brand-shape.svg'
+  a.download = `brand-shape-${exportConfig.width}x${exportConfig.height}.svg`
   a.click()
   URL.revokeObjectURL(url)
 }
 
+const logoFolder = gui.addFolder('Logo')
+logoFolder.add(config, 'logoEnabled').name('Enabled').onChange(onConfigChange)
+logoFolder.add(config, 'logoColor', ['black', 'white']).name('Color').onChange(onConfigChange)
+
 const exportFolder = gui.addFolder('Export')
-exportFolder.add(exportConfig, 'transparentBg').name('Transparent BG')
-exportFolder.add(exportConfig, 'highRes').name('High Res SVG')
-exportFolder.add({ exportPNG }, 'exportPNG').name('Export PNG')
-exportFolder.add({ exportSVG }, 'exportSVG').name('Export SVG')
+exportFolder.add(exportConfig, 'width', 16, 16384, 1).name('Width (px)').onChange(handleResize)
+exportFolder.add(exportConfig, 'height', 16, 16384, 1).name('Height (px)').onChange(handleResize)
+
+const formatCtrl = exportFolder.add(exportConfig, 'format', ['png', 'jpg', 'svg']).name('Format')
+const qualityCtrl = exportFolder.add(exportConfig, 'quality', 0.5, 1.0, 0.01).name('JPG Quality')
+const transparentCtrl = exportFolder.add(exportConfig, 'transparentBg').name('Transparent BG')
+
+function syncFormatVisibility() {
+  if (exportConfig.format === 'jpg') {
+    qualityCtrl.show()
+    transparentCtrl.hide()
+  } else {
+    qualityCtrl.hide()
+    transparentCtrl.show()
+  }
+}
+formatCtrl.onChange(syncFormatVisibility)
+syncFormatVisibility()
+
+exportFolder.add({
+  export: () => {
+    if (exportConfig.format === 'svg') exportSVG()
+    else exportRaster(exportConfig.format)
+  },
+}, 'export').name('Export')

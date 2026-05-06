@@ -1,5 +1,12 @@
 // src/core/svg-export.ts
 import { buildLinearGradientStops } from './effects'
+import {
+  LOGO_PATHS,
+  LOGO_FILL,
+  LOGO_VIEWBOX,
+  computeLogoPlacement,
+  type LogoColor,
+} from './logo'
 
 export interface SVGExportColours {
   current: string
@@ -39,6 +46,21 @@ export interface SVGExportConfig {
   noiseImage?: string
   /** Size of the noise tile in pixels */
   noiseTileSize?: number
+  /** When set, embeds the Portable logo overlay in the bottom-left. */
+  logo?: { color: LogoColor }
+}
+
+/** Build the inline logo block. Empty string when config.logo is unset. */
+function logoBlock(config: SVGExportConfig): string {
+  if (!config.logo) return ''
+  const placement = computeLogoPlacement(config.width, config.height)
+  const sx = placement.width / LOGO_VIEWBOX.width
+  const sy = placement.height / LOGO_VIEWBOX.height
+  const fill = LOGO_FILL[config.logo.color]
+  return `\n  <g transform="translate(${placement.x}, ${placement.y}) scale(${sx}, ${sy})">
+    <path fill-rule="evenodd" d="${LOGO_PATHS.body}" fill="${fill}"/>
+    <path d="${LOGO_PATHS.slash}" fill="${fill}"/>
+  </g>`
 }
 
 /**
@@ -226,6 +248,6 @@ export function generateSVG(config: SVGExportConfig): string {
   </defs>${bgRect}
   <g clip-path="url(#viewport-clip)">
     ${body}
-  </g>
+  </g>${logoBlock(config)}
 </svg>`
 }
