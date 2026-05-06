@@ -183,6 +183,7 @@ function drawLogo(
   ctx: CanvasRenderingContext2D,
   width: number,
   height: number,
+  dpr: number,
   style: LogoStyle,
   color: string,
   opacity: number,
@@ -196,7 +197,7 @@ function drawLogo(
   if (alpha === 0) return
 
   if (alpha === 1) {
-    // Fast path: draw directly to main context
+    // Fast path: draw directly via Path2D into the main context.
     ctx.save()
     ctx.translate(placement.x, placement.y)
     ctx.scale(sx, sy)
@@ -211,14 +212,16 @@ function drawLogo(
   }
 
   // Composite paths to an offscreen at full alpha so the union is a single
-  // solid shape, then drawImage to main with globalAlpha.
-  const offW = Math.max(1, Math.ceil(placement.width))
-  const offH = Math.max(1, Math.ceil(placement.height))
+  // solid shape, then drawImage to main with globalAlpha. Render the offscreen
+  // at backing-store resolution (CSS pixels × dpr) so the bitmap stays crisp
+  // when drawn into the main context, which has ctx.scale(dpr, dpr) applied.
+  const offW = Math.max(1, Math.ceil(placement.width * dpr))
+  const offH = Math.max(1, Math.ceil(placement.height * dpr))
   const off = new OffscreenCanvas(offW, offH)
   const offCtx = off.getContext('2d')
   if (!offCtx) return
 
-  offCtx.scale(sx, sy)
+  offCtx.scale(sx * dpr, sy * dpr)
   offCtx.fillStyle = color
   for (const path of variant.paths) {
     const p2d = new Path2D(path.d)
@@ -226,9 +229,11 @@ function drawLogo(
     else offCtx.fill(p2d)
   }
 
+  // Destination size in CSS pixels. Main context's ctx.scale(dpr,dpr) maps
+  // this back up to backing-store pixels at 1:1 with the offscreen — sharp.
   ctx.save()
   ctx.globalAlpha = alpha
-  ctx.drawImage(off, placement.x, placement.y)
+  ctx.drawImage(off, placement.x, placement.y, placement.width, placement.height)
   ctx.restore()
 }
 
@@ -342,7 +347,7 @@ export function render(canvas: HTMLCanvasElement, config: RenderConfig, target: 
 
   if (config.logo) {
     drawLogo(
-      ctx, width, height,
+      ctx, width, height, dpr,
       config.logo.style,
       config.logo.color,
       config.logo.opacity ?? 1,
