@@ -67,7 +67,7 @@ const config = {
   // Logo overlay
   logoEnabled: false,
   logoStyle: 'symbol' as 'symbol' | 'wordmark',
-  logoColor: '#181818',
+  logoColor: '#FCFCFC',
   logoOpacity: 1.0,
 }
 
