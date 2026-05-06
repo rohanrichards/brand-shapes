@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased — Wordmark Logo & Custom Colors
+
+### Added
+- **Wordmark logo variant.** Logo folder gains a Style dropdown (Symbol / Wordmark). Wordmark sits at 180×32 base size at the 1920×1080 reference, scaled by the same `min(W/1920, H/1080)` rule as the symbol.
+- **Arbitrary logo color (RGBA).** Color picker replaces the black/white toggle, with a separate Opacity slider (0–1). Renderer and SVG export accept any CSS color string, so logos can be transparent or off-brand.
+
+### Changed
+- Logo API: `LogoStyle` type added; `LogoColor`/`LOGO_FILL`/`LOGO_PATHS`/`LOGO_VIEWBOX` removed in favor of `LOGO_VARIANTS[style]` (`{ viewBox, base, paths }`). `computeLogoPlacement(style, w, h)` takes a style argument. `RenderConfig.logo` and `SVGExportConfig.logo` are now `{ style, color }` where color is any CSS color string.
+
 ## Unreleased — Wallpaper Export & Logo
 
 ### Added

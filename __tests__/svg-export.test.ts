@@ -160,54 +160,90 @@ describe('generateSVG — gradient variant', () => {
 describe('generateSVG — logo overlay', () => {
   it('omits logo block when config.logo is undefined', () => {
     const svg = generateSVG(makeWireframeConfig())
-    expect(svg).not.toContain('M240 4.20461') // slash signature
+    expect(svg).not.toContain('M240 4.20461')   // symbol slash signature
+    expect(svg).not.toContain('M587.157')        // wordmark "e" signature start
     expect(svg).not.toContain('#181818')
-    expect(svg).not.toContain('#FCFCFC')
   })
 
-  it('includes black logo paths and fill when color=black', () => {
+  it('symbol: emits two paths with caller-supplied color', () => {
     const svg = generateSVG(makeWireframeConfig({
       width: 1920, height: 1080,
-      logo: { color: 'black' },
+      logo: { style: 'symbol', color: '#181818' },
     }))
-    expect(svg).toContain('M240 4.20461')  // slash signature
-    expect(svg).toContain('M0 0.996613')    // body signature
+    expect(svg).toContain('M240 4.20461')
+    expect(svg).toContain('M0 0.996613')
     expect(svg).toContain('fill="#181818"')
     expect(svg).toContain('fill-rule="evenodd"')
+    // symbol has 2 paths
+    const matches = svg.match(/<path[^>]*d="M[^"]+" fill="#181818"/g) ?? []
+    expect(matches.length).toBe(2)
   })
 
-  it('uses white fill when color=white', () => {
+  it('wordmark: emits 7 paths with caller-supplied color', () => {
     const svg = generateSVG(makeWireframeConfig({
       width: 1920, height: 1080,
-      logo: { color: 'white' },
+      logo: { style: 'wordmark', color: '#FCFCFC' },
     }))
     expect(svg).toContain('fill="#FCFCFC"')
-    expect(svg).not.toContain('fill="#181818"')
+    const matches = svg.match(/<path[^>]*d="M[^"]+" fill="#FCFCFC"/g) ?? []
+    expect(matches.length).toBe(7)
   })
 
-  it('places logo at bottom-left with template-spec transform at 1920x1080', () => {
+  it('symbol at 1920x1080: scale=1, x=48, y=944 (template-spec transform)', () => {
     const svg = generateSVG(makeWireframeConfig({
       width: 1920, height: 1080,
-      logo: { color: 'black' },
+      logo: { style: 'symbol', color: '#181818' },
     }))
-    // scale=1 -> x=48, y=1080-48-88=944. Logo viewBox 240x213 -> sx=100/240≈0.4167, sy=88/213≈0.4131
     expect(svg).toMatch(/translate\(48,\s*944\)/)
-    expect(svg).toContain('scale(0.41666')
+    expect(svg).toContain('scale(0.41666')  // 100/240
   })
 
-  it('scales placement proportionally for 4K (3840x2160)', () => {
+  it('wordmark at 1920x1080: scale=1, x=48, y=1000 (180×32 base, 48 padding)', () => {
     const svg = generateSVG(makeWireframeConfig({
-      width: 3840, height: 2160,
-      logo: { color: 'black' },
+      width: 1920, height: 1080,
+      logo: { style: 'wordmark', color: '#181818' },
     }))
-    // scale=2 -> x=96, y=2160-96-176=1888
-    expect(svg).toMatch(/translate\(96,\s*1888\)/)
+    // y = 1080 - 48 - 32 = 1000
+    expect(svg).toMatch(/translate\(48,\s*1000\)/)
+    // sx = 180/640 = 0.28125
+    expect(svg).toContain('scale(0.28125')
+  })
+
+  it('accepts arbitrary CSS color (rgba supported for transparency)', () => {
+    const svg = generateSVG(makeWireframeConfig({
+      width: 1920, height: 1080,
+      logo: { style: 'symbol', color: 'rgba(255, 0, 128, 0.5)' },
+    }))
+    expect(svg).toContain('fill="rgba(255, 0, 128, 0.5)"')
+  })
+
+  it('omits opacity attribute when opacity defaults to 1 (or is unset)', () => {
+    const svg = generateSVG(makeWireframeConfig({
+      width: 1920, height: 1080,
+      logo: { style: 'symbol', color: '#181818' },
+    }))
+    // Logo group should not carry opacity attr at full alpha
+    const logoGroupMatch = svg.match(/<g transform="translate\(48[^>]*>/)
+    expect(logoGroupMatch).toBeTruthy()
+    expect(logoGroupMatch![0]).not.toContain('opacity=')
+  })
+
+  it('applies group opacity (not per-path) when opacity < 1, so overlaps merge', () => {
+    const svg = generateSVG(makeWireframeConfig({
+      width: 1920, height: 1080,
+      logo: { style: 'symbol', color: '#181818', opacity: 0.5 },
+    }))
+    expect(svg).toContain('opacity="0.5"')
+    // Per-path fill stays solid hex (no rgba alpha leak), so group-opacity
+    // is the sole alpha source — guarantees the overlap merge.
+    expect(svg).toContain('fill="#181818"')
+    expect(svg).not.toContain('rgba(')
   })
 
   it('emits logo after the viewport-clipped shape group (so logo is not clipped)', () => {
     const svg = generateSVG(makeWireframeConfig({
       width: 1920, height: 1080,
-      logo: { color: 'black' },
+      logo: { style: 'symbol', color: '#181818' },
     }))
     const clipGroupClose = svg.indexOf('</g>')
     const logoIdx = svg.indexOf('M240 4.20461')

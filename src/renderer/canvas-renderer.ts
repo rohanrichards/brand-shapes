@@ -20,11 +20,9 @@ import {
   DEFAULT_BLUR_CONFIG,
 } from '../core/effects'
 import {
-  LOGO_PATHS,
-  LOGO_FILL,
-  LOGO_VIEWBOX,
+  LOGO_VARIANTS,
   computeLogoPlacement,
-  type LogoColor,
+  type LogoStyle,
 } from '../core/logo'
 
 export type Variant = 'wireframe' | 'filled' | 'gradient'
@@ -73,7 +71,7 @@ export interface RenderConfig {
   /** Gradient center Y offset from centroid in viewBox units (default 0). */
   gradientCenterY?: number
   /** When set, draws the Portable logo overlay in the bottom-left. */
-  logo?: { color: LogoColor }
+  logo?: { style: LogoStyle; color: string; opacity?: number; scale?: number }
 }
 
 export const DEFAULT_CONFIG: RenderConfig = {
@@ -175,30 +173,67 @@ function applyMaskedBlur(
 }
 
 /**
- * Draws the Portable logo at the bottom-left, scaled proportionally to canvas dims.
- * Path data is fixed (Portable brand assets, see src/core/logo.ts).
+ * Draws the Portable logo (symbol or wordmark) at the bottom-left.
+ *
+ * When opacity < 1 we composite to an offscreen canvas first so overlapping
+ * paths (e.g. the slash across the P) merge into one shape before alpha is
+ * applied — otherwise overlap regions appear brighter than the rest.
  */
 function drawLogo(
   ctx: CanvasRenderingContext2D,
   width: number,
   height: number,
-  color: LogoColor,
+  dpr: number,
+  style: LogoStyle,
+  color: string,
+  opacity: number,
+  userScale: number,
 ): void {
-  const placement = computeLogoPlacement(width, height)
-  const sx = placement.width / LOGO_VIEWBOX.width
-  const sy = placement.height / LOGO_VIEWBOX.height
+  const variant = LOGO_VARIANTS[style]
+  const placement = computeLogoPlacement(style, width, height, userScale)
+  const sx = placement.width / variant.viewBox.width
+  const sy = placement.height / variant.viewBox.height
+  const alpha = Math.max(0, Math.min(1, opacity))
+  if (alpha === 0) return
 
+  if (alpha === 1) {
+    // Fast path: draw directly via Path2D into the main context.
+    ctx.save()
+    ctx.translate(placement.x, placement.y)
+    ctx.scale(sx, sy)
+    ctx.fillStyle = color
+    for (const path of variant.paths) {
+      const p2d = new Path2D(path.d)
+      if (path.fillRule === 'evenodd') ctx.fill(p2d, 'evenodd')
+      else ctx.fill(p2d)
+    }
+    ctx.restore()
+    return
+  }
+
+  // Composite paths to an offscreen at full alpha so the union is a single
+  // solid shape, then drawImage to main with globalAlpha. Render the offscreen
+  // at backing-store resolution (CSS pixels × dpr) so the bitmap stays crisp
+  // when drawn into the main context, which has ctx.scale(dpr, dpr) applied.
+  const offW = Math.max(1, Math.ceil(placement.width * dpr))
+  const offH = Math.max(1, Math.ceil(placement.height * dpr))
+  const off = new OffscreenCanvas(offW, offH)
+  const offCtx = off.getContext('2d')
+  if (!offCtx) return
+
+  offCtx.scale(sx * dpr, sy * dpr)
+  offCtx.fillStyle = color
+  for (const path of variant.paths) {
+    const p2d = new Path2D(path.d)
+    if (path.fillRule === 'evenodd') offCtx.fill(p2d, 'evenodd')
+    else offCtx.fill(p2d)
+  }
+
+  // Destination size in CSS pixels. Main context's ctx.scale(dpr,dpr) maps
+  // this back up to backing-store pixels at 1:1 with the offscreen — sharp.
   ctx.save()
-  ctx.translate(placement.x, placement.y)
-  ctx.scale(sx, sy)
-  ctx.fillStyle = LOGO_FILL[color]
-
-  const body = new Path2D(LOGO_PATHS.body)
-  ctx.fill(body, 'evenodd')
-
-  const slash = new Path2D(LOGO_PATHS.slash)
-  ctx.fill(slash)
-
+  ctx.globalAlpha = alpha
+  ctx.drawImage(off, placement.x, placement.y, placement.width, placement.height)
   ctx.restore()
 }
 
@@ -311,7 +346,13 @@ export function render(canvas: HTMLCanvasElement, config: RenderConfig, target: 
   }
 
   if (config.logo) {
-    drawLogo(ctx, width, height, config.logo.color)
+    drawLogo(
+      ctx, width, height, dpr,
+      config.logo.style,
+      config.logo.color,
+      config.logo.opacity ?? 1,
+      config.logo.scale ?? 1,
+    )
   }
 }
 

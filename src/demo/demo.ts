@@ -66,7 +66,10 @@ const config = {
   preset: 'Organic Flow',
   // Logo overlay
   logoEnabled: false,
-  logoColor: 'black' as 'black' | 'white',
+  logoStyle: 'symbol' as 'symbol' | 'wordmark',
+  logoColor: '#FCFCFC',
+  logoOpacity: 1.0,
+  logoScale: 1.0,
 }
 
 const locks = {
@@ -127,7 +130,14 @@ function buildRenderConfig(customSteps?: string[]): RenderConfig {
     gradientCenterX: config.gradientCenterX,
     gradientCenterY: config.gradientCenterY,
     customSteps: customSteps,
-    logo: config.logoEnabled ? { color: config.logoColor } : undefined,
+    logo: config.logoEnabled
+      ? {
+          style: config.logoStyle,
+          color: config.logoColor,
+          opacity: config.logoOpacity,
+          scale: config.logoScale,
+        }
+      : undefined,
   }
 }
 
@@ -735,7 +745,7 @@ addLockToggle(layoutFolder.add(config, 'spread', 0, 10, 0.1).name('Spread').onCh
 addLockToggle(layoutFolder.add(config, 'scaleFrom', 0.5, 2.0, 0.05).name('Scale From').onChange(onConfigChange), 'scaleFrom')
 addLockToggle(layoutFolder.add(config, 'scaleTo', 0.5, 2.0, 0.05).name('Scale To').onChange(onConfigChange), 'scaleTo')
 
-const animFolder = gui.addFolder('Animation')
+const animFolder = gui.addFolder('Animation').close()
 animFolder.add(config, 'animMode', ['none', 'trail', 'breathe', 'audio']).name('Mode').onChange(() => {
   updateAnimFolders()
   onConfigChange()
@@ -931,7 +941,14 @@ function exportSVG() {
     noiseImage,
     noiseTileSize,
     shapeViewBox: vb,
-    logo: config.logoEnabled ? { color: config.logoColor } : undefined,
+    logo: config.logoEnabled
+      ? {
+          style: config.logoStyle,
+          color: config.logoColor,
+          opacity: config.logoOpacity,
+          scale: config.logoScale,
+        }
+      : undefined,
   }
 
   const svgString = generateSVG(svgConfig)
@@ -946,7 +963,10 @@ function exportSVG() {
 
 const logoFolder = gui.addFolder('Logo')
 logoFolder.add(config, 'logoEnabled').name('Enabled').onChange(onConfigChange)
-logoFolder.add(config, 'logoColor', ['black', 'white']).name('Color').onChange(onConfigChange)
+logoFolder.add(config, 'logoStyle', ['symbol', 'wordmark']).name('Style').onChange(onConfigChange)
+logoFolder.addColor(config, 'logoColor').name('Color').onChange(onConfigChange)
+logoFolder.add(config, 'logoOpacity', 0, 1, 0.01).name('Opacity').onChange(onConfigChange)
+logoFolder.add(config, 'logoScale', 0.1, 5.0, 0.05).name('Scale').onChange(onConfigChange)
 
 const exportFolder = gui.addFolder('Export')
 exportFolder.add(exportConfig, 'width', 16, 16384, 1).name('Width (px)').onChange(handleResize)
