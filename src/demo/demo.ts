@@ -66,7 +66,9 @@ const config = {
   preset: 'Organic Flow',
   // Logo overlay
   logoEnabled: false,
-  logoColor: 'black' as 'black' | 'white',
+  logoStyle: 'symbol' as 'symbol' | 'wordmark',
+  logoColor: '#181818',
+  logoOpacity: 1.0,
 }
 
 const locks = {
@@ -127,8 +129,21 @@ function buildRenderConfig(customSteps?: string[]): RenderConfig {
     gradientCenterX: config.gradientCenterX,
     gradientCenterY: config.gradientCenterY,
     customSteps: customSteps,
-    logo: config.logoEnabled ? { color: config.logoColor } : undefined,
+    logo: config.logoEnabled
+      ? { style: config.logoStyle, color: hexToRgba(config.logoColor, config.logoOpacity) }
+      : undefined,
   }
+}
+
+/** Compose a CSS rgba() string from a hex color (#rrggbb or #rgb) and opacity 0..1. */
+function hexToRgba(hex: string, opacity: number): string {
+  let h = hex.replace('#', '')
+  if (h.length === 3) h = h.split('').map(c => c + c).join('')
+  const r = parseInt(h.slice(0, 2), 16)
+  const g = parseInt(h.slice(2, 4), 16)
+  const b = parseInt(h.slice(4, 6), 16)
+  const a = Math.max(0, Math.min(1, opacity))
+  return `rgba(${r}, ${g}, ${b}, ${a})`
 }
 
 // --- Animation state ---
@@ -931,7 +946,9 @@ function exportSVG() {
     noiseImage,
     noiseTileSize,
     shapeViewBox: vb,
-    logo: config.logoEnabled ? { color: config.logoColor } : undefined,
+    logo: config.logoEnabled
+      ? { style: config.logoStyle, color: hexToRgba(config.logoColor, config.logoOpacity) }
+      : undefined,
   }
 
   const svgString = generateSVG(svgConfig)
@@ -946,7 +963,9 @@ function exportSVG() {
 
 const logoFolder = gui.addFolder('Logo')
 logoFolder.add(config, 'logoEnabled').name('Enabled').onChange(onConfigChange)
-logoFolder.add(config, 'logoColor', ['black', 'white']).name('Color').onChange(onConfigChange)
+logoFolder.add(config, 'logoStyle', ['symbol', 'wordmark']).name('Style').onChange(onConfigChange)
+logoFolder.addColor(config, 'logoColor').name('Color').onChange(onConfigChange)
+logoFolder.add(config, 'logoOpacity', 0, 1, 0.01).name('Opacity').onChange(onConfigChange)
 
 const exportFolder = gui.addFolder('Export')
 exportFolder.add(exportConfig, 'width', 16, 16384, 1).name('Width (px)').onChange(handleResize)

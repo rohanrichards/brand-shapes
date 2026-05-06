@@ -20,11 +20,9 @@ import {
   DEFAULT_BLUR_CONFIG,
 } from '../core/effects'
 import {
-  LOGO_PATHS,
-  LOGO_FILL,
-  LOGO_VIEWBOX,
+  LOGO_VARIANTS,
   computeLogoPlacement,
-  type LogoColor,
+  type LogoStyle,
 } from '../core/logo'
 
 export type Variant = 'wireframe' | 'filled' | 'gradient'
@@ -73,7 +71,7 @@ export interface RenderConfig {
   /** Gradient center Y offset from centroid in viewBox units (default 0). */
   gradientCenterY?: number
   /** When set, draws the Portable logo overlay in the bottom-left. */
-  logo?: { color: LogoColor }
+  logo?: { style: LogoStyle; color: string }
 }
 
 export const DEFAULT_CONFIG: RenderConfig = {
@@ -175,29 +173,31 @@ function applyMaskedBlur(
 }
 
 /**
- * Draws the Portable logo at the bottom-left, scaled proportionally to canvas dims.
- * Path data is fixed (Portable brand assets, see src/core/logo.ts).
+ * Draws the Portable logo (symbol or wordmark) at the bottom-left, scaled
+ * proportionally to canvas dims. Color is any CSS color string (hex or rgba).
  */
 function drawLogo(
   ctx: CanvasRenderingContext2D,
   width: number,
   height: number,
-  color: LogoColor,
+  style: LogoStyle,
+  color: string,
 ): void {
-  const placement = computeLogoPlacement(width, height)
-  const sx = placement.width / LOGO_VIEWBOX.width
-  const sy = placement.height / LOGO_VIEWBOX.height
+  const variant = LOGO_VARIANTS[style]
+  const placement = computeLogoPlacement(style, width, height)
+  const sx = placement.width / variant.viewBox.width
+  const sy = placement.height / variant.viewBox.height
 
   ctx.save()
   ctx.translate(placement.x, placement.y)
   ctx.scale(sx, sy)
-  ctx.fillStyle = LOGO_FILL[color]
+  ctx.fillStyle = color
 
-  const body = new Path2D(LOGO_PATHS.body)
-  ctx.fill(body, 'evenodd')
-
-  const slash = new Path2D(LOGO_PATHS.slash)
-  ctx.fill(slash)
+  for (const path of variant.paths) {
+    const p2d = new Path2D(path.d)
+    if (path.fillRule === 'evenodd') ctx.fill(p2d, 'evenodd')
+    else ctx.fill(p2d)
+  }
 
   ctx.restore()
 }
@@ -311,7 +311,7 @@ export function render(canvas: HTMLCanvasElement, config: RenderConfig, target: 
   }
 
   if (config.logo) {
-    drawLogo(ctx, width, height, config.logo.color)
+    drawLogo(ctx, width, height, config.logo.style, config.logo.color)
   }
 }
 
