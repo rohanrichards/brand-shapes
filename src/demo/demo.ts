@@ -517,6 +517,16 @@ function startCurrentMode() {
   }
 }
 
+// --- Export config (hoisted: read by getPreviewTarget at module init time) ---
+
+const exportConfig = {
+  width: 1920,
+  height: 1080,
+  format: 'png' as 'png' | 'jpg' | 'svg',
+  quality: 0.95,
+  transparentBg: false,
+}
+
 // --- Resize ---
 
 function computePreviewTarget(
@@ -771,14 +781,6 @@ function updateAnimFolders() {
 }
 
 updateAnimFolders()
-
-const exportConfig = {
-  width: 1920,
-  height: 1080,
-  format: 'png' as 'png' | 'jpg' | 'svg',
-  quality: 0.95,
-  transparentBg: false,
-}
 
 function exportRaster(format: 'png' | 'jpg'): void {
   const { width, height, quality, transparentBg } = exportConfig
