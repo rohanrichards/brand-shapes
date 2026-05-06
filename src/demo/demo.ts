@@ -64,6 +64,9 @@ const config = {
   audioSource: 'none' as 'none' | 'mic' | 'system' | 'file',
   audioSensitivity: 1.0,
   preset: 'Organic Flow',
+  // Logo overlay
+  logoEnabled: false,
+  logoColor: 'black' as 'black' | 'white',
 }
 
 const locks = {
@@ -124,6 +127,7 @@ function buildRenderConfig(customSteps?: string[]): RenderConfig {
     gradientCenterX: config.gradientCenterX,
     gradientCenterY: config.gradientCenterY,
     customSteps: customSteps,
+    logo: config.logoEnabled ? { color: config.logoColor } : undefined,
   }
 }
 
@@ -897,6 +901,7 @@ function exportSVG() {
     noiseImage,
     noiseTileSize,
     shapeViewBox: vb,
+    logo: config.logoEnabled ? { color: config.logoColor } : undefined,
   }
 
   const svgString = generateSVG(svgConfig)
@@ -908,6 +913,10 @@ function exportSVG() {
   a.click()
   URL.revokeObjectURL(url)
 }
+
+const logoFolder = gui.addFolder('Logo')
+logoFolder.add(config, 'logoEnabled').name('Enabled').onChange(onConfigChange)
+logoFolder.add(config, 'logoColor', ['black', 'white']).name('Color').onChange(onConfigChange)
 
 const exportFolder = gui.addFolder('Export')
 exportFolder.add(exportConfig, 'width', 16, 16384, 1).name('Width (px)')
