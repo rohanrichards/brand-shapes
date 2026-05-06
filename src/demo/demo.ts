@@ -173,12 +173,7 @@ function renderLayerPoints(layerPoints: Point[][], indices: number[]) {
   const rc = buildRenderConfig(paths)
   rc.stepIndices = indices
   rc.totalStepCount = config.steps
-  const dpr = window.devicePixelRatio || 1
-  render(canvas, rc, {
-    width: canvas.clientWidth,
-    height: canvas.clientHeight,
-    dpr,
-  })
+  render(canvas, rc, getPreviewTarget())
 }
 
 // --- Static render ---
@@ -524,9 +519,42 @@ function startCurrentMode() {
 
 // --- Resize ---
 
+function computePreviewTarget(
+  windowW: number,
+  windowH: number,
+  exportW: number,
+  exportH: number,
+  dpr: number,
+): { width: number; height: number; dpr: number } {
+  const exportAspect = exportW / exportH
+  const windowAspect = windowW / windowH
+  let width: number
+  let height: number
+  if (windowAspect > exportAspect) {
+    height = windowH
+    width = Math.round(height * exportAspect)
+  } else {
+    width = windowW
+    height = Math.round(width / exportAspect)
+  }
+  return { width, height, dpr }
+}
+
+function getPreviewTarget(): { width: number; height: number; dpr: number } {
+  const dpr = window.devicePixelRatio || 1
+  return computePreviewTarget(
+    window.innerWidth,
+    window.innerHeight,
+    exportConfig.width,
+    exportConfig.height,
+    dpr,
+  )
+}
+
 function handleResize() {
-  canvas.style.width = `${window.innerWidth}px`
-  canvas.style.height = `${window.innerHeight}px`
+  const target = getPreviewTarget()
+  canvas.style.width = `${target.width}px`
+  canvas.style.height = `${target.height}px`
   if (!animId) startCurrentMode()
 }
 
@@ -919,8 +947,8 @@ logoFolder.add(config, 'logoEnabled').name('Enabled').onChange(onConfigChange)
 logoFolder.add(config, 'logoColor', ['black', 'white']).name('Color').onChange(onConfigChange)
 
 const exportFolder = gui.addFolder('Export')
-exportFolder.add(exportConfig, 'width', 16, 16384, 1).name('Width (px)')
-exportFolder.add(exportConfig, 'height', 16, 16384, 1).name('Height (px)')
+exportFolder.add(exportConfig, 'width', 16, 16384, 1).name('Width (px)').onChange(handleResize)
+exportFolder.add(exportConfig, 'height', 16, 16384, 1).name('Height (px)').onChange(handleResize)
 
 const formatCtrl = exportFolder.add(exportConfig, 'format', ['png', 'jpg', 'svg']).name('Format')
 const qualityCtrl = exportFolder.add(exportConfig, 'quality', 0.5, 1.0, 0.01).name('JPG Quality')
