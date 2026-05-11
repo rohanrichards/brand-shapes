@@ -383,7 +383,6 @@ function renderWireframe(
     const stepTotal = config.totalStepCount || steps.length
     renderWireframeLayer(ctx, steps[i], stepIdx, stepTotal, colours, config, scale, tx, ty, vb, pixelScale)
   }
-  ctx.globalAlpha = 1
 }
 
 /** Render a single wireframe layer to the given context. */
@@ -416,8 +415,6 @@ function renderWireframeLayer(
   const angleDeg = baseAngle - (1 - stepIdx / stepTotal) * spreadAngle
   const angleRad = (angleDeg * Math.PI) / 180
 
-  const opacity = stepTotal <= 1 ? 1 : 1 - (stepIdx / stepTotal) * 0.6
-
   ctx.save()
 
   const shapeCenterCanvasX = tx + shapeCenterX * scale
@@ -427,7 +424,6 @@ function renderWireframeLayer(
   ctx.translate(-shapeCenterCanvasX, -shapeCenterCanvasY)
   ctx.translate(tx, ty)
   ctx.scale(scale, scale)
-  ctx.globalAlpha = opacity
 
   const conicGradient = ctx.createConicGradient(angleRad, gcx, gcy)
   conicGradient.addColorStop(0, colours.current)

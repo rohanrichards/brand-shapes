@@ -891,9 +891,7 @@ function exportSVG() {
     )
 
     let opacity = 1.0
-    if (config.variant === 'wireframe') {
-      opacity = 1 - (i / paths.length) * 0.6
-    } else if (config.variant === 'gradient') {
+    if (config.variant === 'gradient') {
       const t = paths.length === 1 ? 1 : i / (paths.length - 1)
       opacity = Math.max(0.05, t * t)
     }
