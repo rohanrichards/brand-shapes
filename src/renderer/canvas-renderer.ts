@@ -71,6 +71,8 @@ export interface RenderConfig {
   gradientCenterX?: number
   /** Gradient center Y offset from centroid in viewBox units (default 0). */
   gradientCenterY?: number
+  /** Wireframe stroke thickness in 1080-reference pixels (scaled by computePixelScale at render time). Only affects wireframe variant. Default 1.5. */
+  lineWidth: number
   /** When set, draws the Portable logo overlay in the bottom-left. */
   logo?: { style: LogoStyle; color: string; opacity?: number; scale?: number }
 }
@@ -87,6 +89,7 @@ export const DEFAULT_CONFIG: RenderConfig = {
   spread: 1,
   scaleFrom: 1.15,
   scaleTo: 0.95,
+  lineWidth: 1.5,
 }
 
 /** Generate a noise ImageData texture for overlay compositing. */

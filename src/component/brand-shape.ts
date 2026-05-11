@@ -42,6 +42,7 @@ export class BrandShape extends LitElement {
     noiseOpacity: { type: Number, attribute: 'noise-opacity' },
     scaleFrom: { type: Number, attribute: 'scale-from' },
     scaleTo: { type: Number, attribute: 'scale-to' },
+    lineWidth: { type: Number, attribute: 'line-width' },
     gradientAngle: { type: Number, attribute: 'gradient-angle' },
     gradientSpread: { type: Number, attribute: 'gradient-spread' },
     gradientCenterX: { type: Number, attribute: 'gradient-center-x' },
@@ -72,6 +73,7 @@ export class BrandShape extends LitElement {
   noiseOpacity = 0.12
   scaleFrom = 1.15
   scaleTo = 0.95
+  lineWidth = 1.5
   gradientAngle = 90
   gradientSpread = 120
   gradientCenterX = 0
@@ -131,6 +133,7 @@ export class BrandShape extends LitElement {
       spread: this.spread,
       scaleFrom: this.scaleFrom,
       scaleTo: this.scaleTo,
+      lineWidth: this.lineWidth,
       gradientAngle: this.gradientAngle,
       gradientSpread: this.gradientSpread,
       gradientCenterX: this.gradientCenterX,
