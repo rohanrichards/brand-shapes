@@ -117,9 +117,31 @@ function noiseOverlay(config: SVGExportConfig): string {
 
 function wireframeBody(config: SVGExportConfig): string {
   const bt = config.baseTransform
+  // Match filledGradientBody's per-step transform pattern. Inside the base-transform
+  // group, coordinates are in shape-space, so step offsets must be divided by baseScale.
+  const baseScale = bt?.scale ?? 1
+
   const paths = config.steps.map(step => {
-    const sw = step.strokeWidth ?? 1.5
-    return `<path d="${step.path}" stroke="url(#wireStroke)" stroke-width="${sw}" fill="none" opacity="${step.opacity}"/>`
+    const { scale: stepScale, offsetX, offsetY } = step.transform
+    const [cx, cy] = step.centroid
+
+    const shapeOffsetX = offsetX / baseScale
+    const shapeOffsetY = offsetY / baseScale
+    const tx = cx + shapeOffsetX
+    const ty = cy + shapeOffsetY
+
+    const needsTransform = stepScale !== 1 || shapeOffsetX !== 0 || shapeOffsetY !== 0
+    const stepTransform = needsTransform
+      ? ` transform="translate(${tx},${ty}) scale(${stepScale}) translate(${-cx},${-cy})"`
+      : ''
+
+    // Stroke width divided by stepScale: when SVG applies scale(stepScale) to a group,
+    // stroke widths inside that group scale too. Dividing compensates so the visible
+    // stroke thickness stays constant across layers.
+    const baseSw = step.strokeWidth ?? 1.5
+    const sw = baseSw / stepScale
+
+    return `<path d="${step.path}" stroke="url(#wireStroke)" stroke-width="${sw}" fill="none" opacity="${step.opacity}"${stepTransform}/>`
   }).join('\n      ')
 
   const noise = noiseOverlay(config)
