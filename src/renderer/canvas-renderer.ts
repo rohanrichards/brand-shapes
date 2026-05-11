@@ -13,7 +13,6 @@ import type { GradientColours } from '../core/colours'
 import { generateMorphSteps } from '../core/morph'
 import {
   generateStepFills,
-  buildLinearGradientStops,
   type NoiseConfig,
   type BlurConfig,
   DEFAULT_NOISE_CONFIG,
@@ -304,12 +303,7 @@ export function render(canvas: HTMLCanvasElement, config: RenderConfig, target: 
       if (config.variant === 'filled') {
         renderFilledLayer(tempCtx, steps[i], stepIdx, stepTotal, colours, config, scaleFactor, translateX, translateY, vb)
       } else if (config.variant === 'wireframe') {
-        const wireframeGradientStops = buildLinearGradientStops(colours.current, colours.catalyst, colours.future)
-        const wireframeGradient = tempCtx.createLinearGradient(0, 0, width, height)
-        for (const stop of wireframeGradientStops) {
-          wireframeGradient.addColorStop(stop.offset, stop.color)
-        }
-        renderWireframeLayer(tempCtx, steps[i], stepIdx, stepTotal, config, scaleFactor, translateX, translateY, wireframeGradient, pixelScale)
+        renderWireframeLayer(tempCtx, steps[i], stepIdx, stepTotal, colours, config, scaleFactor, translateX, translateY, vb, pixelScale)
       } else {
         renderGradientLayer(tempCtx, steps[i], stepIdx, stepTotal, i, steps.length, colours, config, scaleFactor, translateX, translateY, vb)
       }
@@ -326,7 +320,7 @@ export function render(canvas: HTMLCanvasElement, config: RenderConfig, target: 
     // --- Standard path (no per-layer blur) ---
     switch (config.variant) {
       case 'wireframe':
-        renderWireframe(offCtx, steps, colours, config, scaleFactor, translateX, translateY, width, height, pixelScale)
+        renderWireframe(offCtx, steps, colours, config, scaleFactor, translateX, translateY, width, height, vb, pixelScale)
         break
       case 'filled':
         renderFilled(offCtx, steps, colours, config, scaleFactor, translateX, translateY, width, height, vb)
@@ -379,20 +373,15 @@ function renderWireframe(
   scale: number,
   tx: number,
   ty: number,
-  width: number,
-  height: number,
+  _width: number,
+  _height: number,
+  vb: number[],
   pixelScale: number,
 ): void {
-  const gradientStops = buildLinearGradientStops(colours.current, colours.catalyst, colours.future)
-  const gradient = ctx.createLinearGradient(0, 0, width, height)
-  for (const stop of gradientStops) {
-    gradient.addColorStop(stop.offset, stop.color)
-  }
-
   for (let i = 0; i < steps.length; i++) {
     const stepIdx = config.stepIndices ? config.stepIndices[i] : i
     const stepTotal = config.totalStepCount || steps.length
-    renderWireframeLayer(ctx, steps[i], stepIdx, stepTotal, config, scale, tx, ty, gradient, pixelScale)
+    renderWireframeLayer(ctx, steps[i], stepIdx, stepTotal, colours, config, scale, tx, ty, vb, pixelScale)
   }
   ctx.globalAlpha = 1
 }
@@ -403,32 +392,50 @@ function renderWireframeLayer(
   step: string,
   stepIdx: number,
   stepTotal: number,
+  colours: { current: string; catalyst: string; future: string },
   config: RenderConfig,
   scale: number,
   tx: number,
   ty: number,
-  gradient: CanvasGradient,
+  vb: number[],
   pixelScale: number,
 ): void {
+  const shapeCenterX = vb[2] / 2
+  const shapeCenterY = vb[3] / 2
+
+  const baseAngle = config.gradientAngle ?? 90
+  const spreadAngle = config.gradientSpread ?? 120
+  const gcx = shapeCenterX + (config.gradientCenterX ?? 0)
+  const gcy = shapeCenterY + (config.gradientCenterY ?? 0)
+
   const { scale: stepScale, offsetX, offsetY } = computeStepTransform(
     stepIdx, stepTotal, config.align, config.spread, config.scaleFrom, config.scaleTo,
   )
   const totalScale = scale * stepScale
 
-  const [shapeCenterX, shapeCenterY] = pathCentroid(step)
-  const shapeCenterCanvasX = tx + shapeCenterX * scale
-  const shapeCenterCanvasY = ty + shapeCenterY * scale
+  const angleDeg = baseAngle - (1 - stepIdx / stepTotal) * spreadAngle
+  const angleRad = (angleDeg * Math.PI) / 180
 
   const opacity = stepTotal <= 1 ? 1 : 1 - (stepIdx / stepTotal) * 0.6
 
   ctx.save()
+
+  const shapeCenterCanvasX = tx + shapeCenterX * scale
+  const shapeCenterCanvasY = ty + shapeCenterY * scale
   ctx.translate(shapeCenterCanvasX + offsetX, shapeCenterCanvasY + offsetY)
-  ctx.scale(stepScale, stepScale)
+  ctx.scale(totalScale / scale, totalScale / scale)
   ctx.translate(-shapeCenterCanvasX, -shapeCenterCanvasY)
   ctx.translate(tx, ty)
   ctx.scale(scale, scale)
   ctx.globalAlpha = opacity
-  ctx.strokeStyle = gradient
+
+  const conicGradient = ctx.createConicGradient(angleRad, gcx, gcy)
+  conicGradient.addColorStop(0, colours.current)
+  conicGradient.addColorStop(0.293, colours.future)
+  conicGradient.addColorStop(0.459, colours.catalyst)
+  conicGradient.addColorStop(1, colours.current)
+
+  ctx.strokeStyle = conicGradient
   ctx.lineWidth = (config.lineWidth * pixelScale) / totalScale
   ctx.stroke(new Path2D(step))
   ctx.restore()

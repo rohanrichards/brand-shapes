@@ -903,7 +903,7 @@ function exportSVG() {
       : [vb[2] / 2, vb[3] / 2]
 
     let gradientImage: string | undefined
-    if (config.variant === 'filled' || config.variant === 'gradient') {
+    if (config.variant === 'filled' || config.variant === 'gradient' || config.variant === 'wireframe') {
       const baseAngle = config.gradientAngle ?? 90
       const spreadAngle = config.gradientSpread ?? 120
       const angleDeg = baseAngle - (1 - i / totalSteps) * spreadAngle
