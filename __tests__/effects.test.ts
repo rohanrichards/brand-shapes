@@ -6,6 +6,8 @@ import {
   buildLinearGradientStops,
   DEFAULT_NOISE_CONFIG,
   DEFAULT_BLUR_CONFIG,
+  REFERENCE_DIM,
+  computePixelScale,
 } from '../src/core/effects'
 
 describe('lerpColour', () => {
@@ -112,5 +114,37 @@ describe('noise and blur configs', () => {
     expect(DEFAULT_BLUR_CONFIG.maskPosition).toBe(0.5)
     expect(DEFAULT_BLUR_CONFIG.maskHardness).toBe(0.5)
     expect(DEFAULT_BLUR_CONFIG.maskBlurRadius).toBe(10)
+  })
+})
+
+describe('REFERENCE_DIM', () => {
+  it('is 1080', () => {
+    expect(REFERENCE_DIM).toBe(1080)
+  })
+})
+
+describe('computePixelScale', () => {
+  it('returns 1 at the reference dimension (square)', () => {
+    expect(computePixelScale(1080, 1080)).toBe(1)
+  })
+
+  it('returns 1 when wider than tall but min equals reference', () => {
+    expect(computePixelScale(1920, 1080)).toBe(1)
+  })
+
+  it('returns 1 when taller than wide but min equals reference', () => {
+    expect(computePixelScale(1080, 1920)).toBe(1)
+  })
+
+  it('returns 0.5 at half the reference dimension', () => {
+    expect(computePixelScale(540, 540)).toBe(0.5)
+  })
+
+  it('returns 2 at double the reference dimension', () => {
+    expect(computePixelScale(2160, 4000)).toBe(2)
+  })
+
+  it('anchors to the smaller dimension', () => {
+    expect(computePixelScale(4000, 540)).toBe(0.5)
   })
 })
