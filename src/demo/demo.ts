@@ -42,6 +42,7 @@ const config = {
   spread: 1.2,
   scaleFrom: 1.15,
   scaleTo: 0.95,
+  lineWidth: 1.5,
   // Gradient controls
   gradientAngle: 90,
   gradientSpread: 120,
@@ -125,6 +126,7 @@ function buildRenderConfig(customSteps?: string[]): RenderConfig {
     spread: config.spread,
     scaleFrom: config.scaleFrom,
     scaleTo: config.scaleTo,
+    lineWidth: config.lineWidth,
     gradientAngle: config.gradientAngle,
     gradientSpread: config.gradientSpread,
     gradientCenterX: config.gradientCenterX,
@@ -651,9 +653,21 @@ function addLockToggle(controller: ReturnType<GUI['add']>, lockKey: keyof typeof
 }
 
 const shapeFolder = gui.addFolder('Shape')
+const variantCtrl = shapeFolder.add(config, 'variant', ['wireframe', 'filled', 'gradient']).name('Variant').onChange(() => {
+  syncVariantVisibility()
+  onConfigChange()
+})
+addLockToggle(variantCtrl, 'variant')
 addLockToggle(shapeFolder.add(config, 'from', shapeNames).name('From').onChange(onConfigChange), 'from')
 addLockToggle(shapeFolder.add(config, 'to', shapeNames).name('To').onChange(onConfigChange), 'to')
 addLockToggle(shapeFolder.add(config, 'steps', 5, 15, 1).name('Steps').onChange(onConfigChange), 'steps')
+const lineWidthCtrl = shapeFolder.add(config, 'lineWidth', 0.5, 10, 0.1).name('Line Width').onChange(onConfigChange)
+
+function syncVariantVisibility() {
+  if (config.variant === 'wireframe') lineWidthCtrl.show()
+  else lineWidthCtrl.hide()
+}
+syncVariantVisibility()
 
 const colourFolder = gui.addFolder('Colour')
 addLockToggle(colourFolder.add(config, 'colourFrom', allColourOptions).name('From').onChange(onConfigChange), 'colourFrom')
@@ -661,10 +675,9 @@ addLockToggle(colourFolder.add(config, 'colourCatalyst', allColourOptions).name(
 addLockToggle(colourFolder.add(config, 'colourTo', allColourOptions).name('To').onChange(onConfigChange), 'colourTo')
 addLockToggle(colourFolder.add(config, 'background', backgroundOptions).name('Background').onChange(onConfigChange), 'background')
 
-const effectsFolder = gui.addFolder('Effects')
-addLockToggle(effectsFolder.add(config, 'variant', ['wireframe', 'filled', 'gradient']).name('Variant').onChange(onConfigChange), 'variant')
-effectsFolder.add(config, 'noise').name('Noise').onChange(onConfigChange)
-effectsFolder.add(config, 'noiseOpacity', 0, 0.5, 0.01).name('Noise Opacity').onChange(onConfigChange)
+const grainFolder = gui.addFolder('Film Grain')
+grainFolder.add(config, 'noise').name('Noise').onChange(onConfigChange)
+grainFolder.add(config, 'noiseOpacity', 0, 0.5, 0.01).name('Noise Opacity').onChange(onConfigChange)
 
 const blurFolder = gui.addFolder('Blur')
 blurFolder.add(config, 'layerBlurEnabled').name('Layer Enabled').onChange(onConfigChange)
@@ -878,9 +891,7 @@ function exportSVG() {
     )
 
     let opacity = 1.0
-    if (config.variant === 'wireframe') {
-      opacity = 1 - (i / paths.length) * 0.6
-    } else if (config.variant === 'gradient') {
+    if (config.variant === 'gradient') {
       const t = paths.length === 1 ? 1 : i / (paths.length - 1)
       opacity = Math.max(0.05, t * t)
     }
@@ -890,7 +901,7 @@ function exportSVG() {
       : [vb[2] / 2, vb[3] / 2]
 
     let gradientImage: string | undefined
-    if (config.variant === 'filled' || config.variant === 'gradient') {
+    if (config.variant === 'filled' || config.variant === 'gradient' || config.variant === 'wireframe') {
       const baseAngle = config.gradientAngle ?? 90
       const spreadAngle = config.gradientSpread ?? 120
       const angleDeg = baseAngle - (1 - i / totalSteps) * spreadAngle
@@ -905,7 +916,7 @@ function exportSVG() {
     }
 
     const scaleFactor = Math.min(screenW / vb[2], screenH / vb[3]) * 0.8
-    const strokeWidth = config.variant === 'wireframe' ? 1.5 / scaleFactor : undefined
+    const strokeWidth = config.variant === 'wireframe' ? (config.lineWidth * pixelScale) / scaleFactor : undefined
 
     const hasLayerBlur = config.layerBlurEnabled && (config.layerBlurFrom > 0 || config.layerBlurTo > 0)
     const t = paths.length === 1 ? 0 : i / (paths.length - 1)
@@ -936,7 +947,7 @@ function exportSVG() {
     viewBox: [0, 0, screenW, screenH],
     background: exportConfig.transparentBg ? 'transparent' : config.background,
     variant: config.variant as any,
-    noise: config.noise,
+    noise: config.noise && config.variant !== 'wireframe',
     noiseOpacity: config.noiseOpacity,
     colours,
     steps,

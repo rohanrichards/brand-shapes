@@ -29,23 +29,30 @@ describe('generateSVG — wireframe', () => {
     expect(svg).toContain('</svg>')
   })
 
-  it('includes linearGradient in defs', () => {
-    const svg = generateSVG(makeWireframeConfig())
-    expect(svg).toContain('<linearGradient')
-    expect(svg).toContain('id="wireStroke"')
+  it('includes per-step pattern defs when gradientImage is provided', () => {
+    const svg = generateSVG(makeWireframeConfig({
+      steps: [
+        { path: 'M 10 10 L 90 10 L 90 90 Z', centroid: [63.3, 36.7], transform: { scale: 1, offsetX: 0, offsetY: 0 }, opacity: 1.0, strokeWidth: 1.5, gradientImage: 'data:image/jpeg;base64,/9j/fake1' },
+        { path: 'M 20 20 L 80 20 L 80 80 Z', centroid: [60, 40], transform: { scale: 1, offsetX: 0, offsetY: 0 }, opacity: 0.7, strokeWidth: 1.5, gradientImage: 'data:image/jpeg;base64,/9j/fake2' },
+      ],
+    }))
+    expect(svg).toContain('id="wire-grad-0"')
+    expect(svg).toContain('id="wire-grad-1"')
+    expect(svg).toContain('patternUnits="userSpaceOnUse"')
+    expect(svg).not.toContain('<linearGradient')
   })
 
-  it('uses gradient stops from buildLinearGradientStops', () => {
+  it('does not include per-step patterns when steps lack gradientImage', () => {
     const svg = generateSVG(makeWireframeConfig())
-    expect(svg).toContain('offset="0"')
-    expect(svg).toContain('offset="0.45"')
-    expect(svg).toContain('offset="0.55"')
-    expect(svg).toContain('offset="1"')
+    // No gradientImage on steps → no patterns emitted
+    expect(svg).not.toContain('<pattern id="wire-grad-')
+    expect(svg).not.toContain('<linearGradient')
   })
 
-  it('includes one path per step with stroke and no fill', () => {
+  it('includes one path per step with per-step conic gradient stroke and no fill', () => {
     const svg = generateSVG(makeWireframeConfig())
-    expect(svg).toContain('stroke="url(#wireStroke)"')
+    expect(svg).toContain('stroke="url(#wire-grad-0)"')
+    expect(svg).toContain('stroke="url(#wire-grad-1)"')
     expect(svg).toContain('fill="none"')
     const pathMatches = svg.match(/<path[^/]*d="/g)
     expect(pathMatches?.length).toBe(2)
@@ -136,7 +143,7 @@ describe('generateSVG — filled', () => {
     expect(svg).toContain('translate(68.3,36.7) scale(1.1) translate(-63.3,-36.7)')
   })
 
-  it('does not include linearGradient (that is wireframe only)', () => {
+  it('does not include linearGradient', () => {
     const svg = generateSVG(makeFilledConfig())
     expect(svg).not.toContain('<linearGradient')
   })

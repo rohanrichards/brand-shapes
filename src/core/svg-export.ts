@@ -1,5 +1,4 @@
 // src/core/svg-export.ts
-import { buildLinearGradientStops } from './effects'
 import {
   LOGO_VARIANTS,
   computeLogoPlacement,
@@ -87,14 +86,21 @@ function noiseDefs(config: SVGExportConfig): string {
 }
 
 function wireframeDefs(config: SVGExportConfig): string {
-  const stops = buildLinearGradientStops(config.colours.current, config.colours.catalyst, config.colours.future)
-  const stopElements = stops.map(s =>
-    `<stop offset="${s.offset}" stop-color="${s.color}"/>`
-  ).join('\n      ')
+  const svb = config.shapeViewBox ?? config.viewBox
+  const [, , vw, vh] = svb
 
-  let defs = `<linearGradient id="wireStroke" x1="0" y1="0" x2="1" y2="1">
-      ${stopElements}
-    </linearGradient>`
+  // One <pattern> per step, each wrapping that step's rasterized conic gradient.
+  // userSpaceOnUse so the pattern is anchored to shape-space coords (not the
+  // path's bounding box). Width/height extend beyond the viewBox by 50 on each
+  // side to match the rasterized gradient image's coverage.
+  const patterns = config.steps.map((step, i) => {
+    if (!step.gradientImage) return ''
+    return `<pattern id="wire-grad-${i}" x="-50" y="-50" width="${vw + 100}" height="${vh + 100}" patternUnits="userSpaceOnUse">
+      <image href="${step.gradientImage}" x="-50" y="-50" width="${vw + 100}" height="${vh + 100}"/>
+    </pattern>`
+  }).filter(Boolean).join('\n    ')
+
+  let defs = patterns
 
   if (config.noise && config.noiseImage) {
     defs += `\n    ${noiseDefs(config)}`
@@ -117,9 +123,31 @@ function noiseOverlay(config: SVGExportConfig): string {
 
 function wireframeBody(config: SVGExportConfig): string {
   const bt = config.baseTransform
-  const paths = config.steps.map(step => {
-    const sw = step.strokeWidth ?? 1.5
-    return `<path d="${step.path}" stroke="url(#wireStroke)" stroke-width="${sw}" fill="none" opacity="${step.opacity}"/>`
+  // Match filledGradientBody's per-step transform pattern. Inside the base-transform
+  // group, coordinates are in shape-space, so step offsets must be divided by baseScale.
+  const baseScale = bt?.scale ?? 1
+
+  const paths = config.steps.map((step, i) => {
+    const { scale: stepScale, offsetX, offsetY } = step.transform
+    const [cx, cy] = step.centroid
+
+    const shapeOffsetX = offsetX / baseScale
+    const shapeOffsetY = offsetY / baseScale
+    const tx = cx + shapeOffsetX
+    const ty = cy + shapeOffsetY
+
+    const needsTransform = stepScale !== 1 || shapeOffsetX !== 0 || shapeOffsetY !== 0
+    const stepTransform = needsTransform
+      ? ` transform="translate(${tx},${ty}) scale(${stepScale}) translate(${-cx},${-cy})"`
+      : ''
+
+    // Stroke width divided by stepScale: when SVG applies scale(stepScale) to a group,
+    // stroke widths inside that group scale too. Dividing compensates so the visible
+    // stroke thickness stays constant across layers.
+    const baseSw = step.strokeWidth ?? 1.5
+    const sw = baseSw / stepScale
+
+    return `<path d="${step.path}" stroke="url(#wire-grad-${i})" stroke-width="${sw}" fill="none" opacity="${step.opacity}"${stepTransform}/>`
   }).join('\n      ')
 
   const noise = noiseOverlay(config)
