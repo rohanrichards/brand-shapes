@@ -1,7 +1,7 @@
 import GUI from 'lil-gui'
 import { render, type RenderConfig } from '../renderer/canvas-renderer'
 import { shapeNames, getShape } from '../core/shapes'
-import { DEFAULT_NOISE_CONFIG, buildLinearGradientStops } from '../core/effects'
+import { DEFAULT_NOISE_CONFIG, buildLinearGradientStops, computePixelScale } from '../core/effects'
 import { generateSVG, type SVGExportConfig, type SVGExportStep } from '../core/svg-export'
 import { pathCentroid, computeStepTransform } from '../core/transforms'
 import { rasterizeConicGradient, rasterizeNoiseTile } from './gradient-rasterizer'
@@ -863,6 +863,7 @@ function exportSVG() {
   // Use export dims (not live canvas) so SVG output is anchored to user request.
   const screenW = exportConfig.width
   const screenH = exportConfig.height
+  const pixelScale = computePixelScale(screenW, screenH)
   const baseScale = Math.min(screenW / vb[2], screenH / vb[3]) * 0.8
   const tx = (screenW - vb[2] * baseScale) / 2
   const ty = (screenH - vb[3] * baseScale) / 2
@@ -909,7 +910,7 @@ function exportSVG() {
     const hasLayerBlur = config.layerBlurEnabled && (config.layerBlurFrom > 0 || config.layerBlurTo > 0)
     const t = paths.length === 1 ? 0 : i / (paths.length - 1)
     const blurRadius = hasLayerBlur
-      ? config.layerBlurTo + (config.layerBlurFrom - config.layerBlurTo) * t
+      ? (config.layerBlurTo + (config.layerBlurFrom - config.layerBlurTo) * t) * pixelScale
       : 0
 
     return {
@@ -923,8 +924,10 @@ function exportSVG() {
     }
   })
 
-  // Rasterize noise tile matching the canvas renderer's exact algorithm
-  const noiseTileSize = 256
+  // Rasterize noise tile matching the canvas renderer's exact algorithm.
+  // Tile pixel-count is scaled by pixelScale so the grain occupies the same
+  // proportion of the image as the live preview does — see REFERENCE_DIM.
+  const noiseTileSize = Math.max(1, Math.round(256 * pixelScale))
   const noiseImage = config.noise ? rasterizeNoiseTile(noiseTileSize, config.noiseOpacity) : undefined
 
   const svgConfig: SVGExportConfig = {
