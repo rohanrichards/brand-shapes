@@ -18,6 +18,7 @@ import {
   type BlurConfig,
   DEFAULT_NOISE_CONFIG,
   DEFAULT_BLUR_CONFIG,
+  computePixelScale,
 } from '../core/effects'
 import {
   LOGO_VARIANTS,
@@ -112,10 +113,11 @@ function applyMaskedBlur(
   height: number,
   dpr: number,
   blur: BlurConfig,
+  pixelScale: number,
 ): void {
   const blurredCanvas = new OffscreenCanvas(width * dpr, height * dpr)
   const blurredCtx = blurredCanvas.getContext('2d')!
-  blurredCtx.filter = `blur(${blur.maskBlurRadius}px)`
+  blurredCtx.filter = `blur(${blur.maskBlurRadius * pixelScale}px)`
   blurredCtx.drawImage(scene, 0, 0)
   blurredCtx.filter = 'none'
 
@@ -247,6 +249,8 @@ export function render(canvas: HTMLCanvasElement, config: RenderConfig, target: 
   canvas.height = height * dpr
   ctx.scale(dpr, dpr)
 
+  const pixelScale = computePixelScale(width, height)
+
   ctx.clearRect(0, 0, width, height)
 
   if (config.background && config.background !== 'transparent') {
@@ -301,7 +305,7 @@ export function render(canvas: HTMLCanvasElement, config: RenderConfig, target: 
       }
 
       const t = steps.length === 1 ? 0 : i / (steps.length - 1)
-      const blurRadius = config.blur.layerBlurTo + (config.blur.layerBlurFrom - config.blur.layerBlurTo) * t
+      const blurRadius = (config.blur.layerBlurTo + (config.blur.layerBlurFrom - config.blur.layerBlurTo) * t) * pixelScale
 
       offCtx.filter = blurRadius > 0 ? `blur(${blurRadius}px)` : 'none'
       offCtx.drawImage(tempCanvas, 0, 0, width, height)
@@ -325,8 +329,9 @@ export function render(canvas: HTMLCanvasElement, config: RenderConfig, target: 
 
   // Noise overlay — clipped to shape area (on offscreen canvas)
   if (config.noise.enabled) {
-    const noiseTexture = generateNoiseTexture(config.noise.size, config.noise.opacity)
-    const noiseCanvas = new OffscreenCanvas(config.noise.size, config.noise.size)
+    const scaledNoiseSize = Math.max(1, Math.round(config.noise.size * pixelScale))
+    const noiseTexture = generateNoiseTexture(scaledNoiseSize, config.noise.opacity)
+    const noiseCanvas = new OffscreenCanvas(scaledNoiseSize, scaledNoiseSize)
     const noiseCtx = noiseCanvas.getContext('2d')!
     noiseCtx.putImageData(noiseTexture, 0, 0)
     const pattern = offCtx.createPattern(noiseCanvas, 'repeat')
@@ -340,7 +345,7 @@ export function render(canvas: HTMLCanvasElement, config: RenderConfig, target: 
 
   // Final compositing: masked blur or direct draw
   if (config.blur.maskEnabled && config.blur.maskBlurRadius > 0) {
-    applyMaskedBlur(ctx, offscreen, width, height, dpr, config.blur)
+    applyMaskedBlur(ctx, offscreen, width, height, dpr, config.blur, pixelScale)
   } else {
     ctx.drawImage(offscreen, 0, 0, width, height)
   }

@@ -113,3 +113,22 @@ export const DEFAULT_BLUR_CONFIG: BlurConfig = {
   maskHardness: 0.5,
   maskBlurRadius: 10,
 }
+
+/**
+ * Reference dimension (in pixels) at which "pixel" values in config are interpreted.
+ * Used by computePixelScale to scale blur radii and noise tile size proportionally
+ * with output resolution, so exports look identical to the live preview.
+ */
+export const REFERENCE_DIM = 1080
+
+/**
+ * Returns the scaling factor for pixel-spatial effects given an output canvas size.
+ * Anchored to the smaller canvas dimension (matches the shape-fit scaling used
+ * elsewhere in the renderer).
+ *
+ * Example: at a 1080×1080 canvas this returns 1 (config values render literally).
+ * At a 4K (3840×2160) canvas this returns 2 (config values render at 2x size).
+ */
+export function computePixelScale(width: number, height: number): number {
+  return Math.min(width, height) / REFERENCE_DIM
+}
