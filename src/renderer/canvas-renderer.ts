@@ -290,7 +290,7 @@ export function render(canvas: HTMLCanvasElement, config: RenderConfig, target: 
   // --- Per-layer blur path ---
   const hasLayerBlur = config.blur.layerBlurFrom > 0 || config.blur.layerBlurTo > 0
 
-  if (hasLayerBlur && config.variant !== 'wireframe') {
+  if (hasLayerBlur) {
     const tempCanvas = new OffscreenCanvas(width * dpr, height * dpr)
     const tempCtx = tempCanvas.getContext('2d')!
     tempCtx.scale(dpr, dpr)
@@ -303,6 +303,13 @@ export function render(canvas: HTMLCanvasElement, config: RenderConfig, target: 
 
       if (config.variant === 'filled') {
         renderFilledLayer(tempCtx, steps[i], stepIdx, stepTotal, colours, config, scaleFactor, translateX, translateY, vb)
+      } else if (config.variant === 'wireframe') {
+        const wireframeGradientStops = buildLinearGradientStops(colours.current, colours.catalyst, colours.future)
+        const wireframeGradient = tempCtx.createLinearGradient(0, 0, width, height)
+        for (const stop of wireframeGradientStops) {
+          wireframeGradient.addColorStop(stop.offset, stop.color)
+        }
+        renderWireframeLayer(tempCtx, steps[i], stepIdx, stepTotal, config, scaleFactor, translateX, translateY, wireframeGradient, pixelScale)
       } else {
         renderGradientLayer(tempCtx, steps[i], stepIdx, stepTotal, i, steps.length, colours, config, scaleFactor, translateX, translateY, vb)
       }
@@ -319,7 +326,7 @@ export function render(canvas: HTMLCanvasElement, config: RenderConfig, target: 
     // --- Standard path (no per-layer blur) ---
     switch (config.variant) {
       case 'wireframe':
-        renderWireframe(offCtx, steps, colours, scaleFactor, translateX, translateY, width, height)
+        renderWireframe(offCtx, steps, colours, config, scaleFactor, translateX, translateY, width, height, pixelScale)
         break
       case 'filled':
         renderFilled(offCtx, steps, colours, config, scaleFactor, translateX, translateY, width, height, vb)
@@ -331,7 +338,7 @@ export function render(canvas: HTMLCanvasElement, config: RenderConfig, target: 
   }
 
   // Noise overlay — clipped to shape area (on offscreen canvas)
-  if (config.noise.enabled) {
+  if (config.noise.enabled && config.variant !== 'wireframe') {
     const scaledNoiseSize = Math.max(1, Math.round(config.noise.size * pixelScale))
     const noiseTexture = generateNoiseTexture(scaledNoiseSize, config.noise.opacity)
     const noiseCanvas = new OffscreenCanvas(scaledNoiseSize, scaledNoiseSize)
@@ -368,11 +375,13 @@ function renderWireframe(
   ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
   steps: string[],
   colours: { current: string; catalyst: string; future: string },
+  config: RenderConfig,
   scale: number,
   tx: number,
   ty: number,
   width: number,
   height: number,
+  pixelScale: number,
 ): void {
   const gradientStops = buildLinearGradientStops(colours.current, colours.catalyst, colours.future)
   const gradient = ctx.createLinearGradient(0, 0, width, height)
@@ -381,18 +390,48 @@ function renderWireframe(
   }
 
   for (let i = 0; i < steps.length; i++) {
-    const opacity = 1 - (i / steps.length) * 0.6
-    const path = new Path2D(steps[i])
-    ctx.save()
-    ctx.translate(tx, ty)
-    ctx.scale(scale, scale)
-    ctx.globalAlpha = opacity
-    ctx.strokeStyle = gradient
-    ctx.lineWidth = 1.5 / scale
-    ctx.stroke(path)
-    ctx.restore()
+    const stepIdx = config.stepIndices ? config.stepIndices[i] : i
+    const stepTotal = config.totalStepCount || steps.length
+    renderWireframeLayer(ctx, steps[i], stepIdx, stepTotal, config, scale, tx, ty, gradient, pixelScale)
   }
   ctx.globalAlpha = 1
+}
+
+/** Render a single wireframe layer to the given context. */
+function renderWireframeLayer(
+  ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
+  step: string,
+  stepIdx: number,
+  stepTotal: number,
+  config: RenderConfig,
+  scale: number,
+  tx: number,
+  ty: number,
+  gradient: CanvasGradient,
+  pixelScale: number,
+): void {
+  const { scale: stepScale, offsetX, offsetY } = computeStepTransform(
+    stepIdx, stepTotal, config.align, config.spread, config.scaleFrom, config.scaleTo,
+  )
+  const totalScale = scale * stepScale
+
+  const [shapeCenterX, shapeCenterY] = pathCentroid(step)
+  const shapeCenterCanvasX = tx + shapeCenterX * scale
+  const shapeCenterCanvasY = ty + shapeCenterY * scale
+
+  const opacity = stepTotal <= 1 ? 1 : 1 - (stepIdx / stepTotal) * 0.6
+
+  ctx.save()
+  ctx.translate(shapeCenterCanvasX + offsetX, shapeCenterCanvasY + offsetY)
+  ctx.scale(stepScale, stepScale)
+  ctx.translate(-shapeCenterCanvasX, -shapeCenterCanvasY)
+  ctx.translate(tx, ty)
+  ctx.scale(scale, scale)
+  ctx.globalAlpha = opacity
+  ctx.strokeStyle = gradient
+  ctx.lineWidth = (config.lineWidth * pixelScale) / totalScale
+  ctx.stroke(new Path2D(step))
+  ctx.restore()
 }
 
 /** Render a single filled layer to the given context. */
