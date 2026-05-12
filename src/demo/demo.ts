@@ -191,7 +191,7 @@ function updateLogoContrast(
     aSum += a
   }
   if (aSum === 0) {
-    // Fully transparent bg — fall back to assuming the demo's background colour
+    // Fully transparent underneath — no meaningful color to contrast against.
     contrastInfo.value = '—'
     contrastCtrl.updateDisplay()
     return
