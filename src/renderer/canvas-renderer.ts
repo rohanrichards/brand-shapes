@@ -183,7 +183,7 @@ function applyMaskedBlur(
  * paths (e.g. the slash across the P) merge into one shape before alpha is
  * applied — otherwise overlap regions appear brighter than the rest.
  */
-function drawLogo(
+export function drawLogo(
   ctx: CanvasRenderingContext2D,
   width: number,
   height: number,
