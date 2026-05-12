@@ -1,5 +1,5 @@
 import GUI from 'lil-gui'
-import { render, type RenderConfig } from '../renderer/canvas-renderer'
+import { render, drawLogo, type RenderConfig } from '../renderer/canvas-renderer'
 import { shapeNames, getShape } from '../core/shapes'
 import { DEFAULT_NOISE_CONFIG, buildLinearGradientStops, computePixelScale } from '../core/effects'
 import { generateSVG, type SVGExportConfig, type SVGExportStep } from '../core/svg-export'
@@ -17,6 +17,8 @@ import {
 } from './audio-source'
 import { presets, presetNames } from './presets'
 import { allColourHexes, allColourOptions } from '../core/colours'
+import { computeLogoPlacement } from '../core/logo'
+import { parseHexColor, contrastRatio, wcagTier, type RGB } from '../core/contrast'
 
 const config = {
   from: 'organic-1',
@@ -143,6 +145,70 @@ function buildRenderConfig(customSteps?: string[]): RenderConfig {
   }
 }
 
+// --- Contrast readout ---
+
+const contrastInfo = { value: '—' }
+let contrastCtrl: ReturnType<GUI['add']> | undefined
+
+function updateLogoContrast(
+  canvas: HTMLCanvasElement,
+  logoCfg: { style: 'symbol' | 'wordmark'; color: string; scale?: number } | null,
+  width: number,
+  height: number,
+  dpr: number,
+): void {
+  if (!logoCfg || !contrastCtrl) {
+    contrastInfo.value = '—'
+    contrastCtrl?.updateDisplay()
+    return
+  }
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return
+
+  const placement = computeLogoPlacement(logoCfg.style, width, height, logoCfg.scale ?? 1)
+
+  // bbox in backing-store pixels
+  const sx = Math.max(0, Math.floor(placement.x * dpr))
+  const sy = Math.max(0, Math.floor(placement.y * dpr))
+  const sw = Math.min(canvas.width - sx, Math.ceil(placement.width * dpr))
+  const sh = Math.min(canvas.height - sy, Math.ceil(placement.height * dpr))
+  if (sw <= 0 || sh <= 0) {
+    contrastInfo.value = '—'
+    contrastCtrl.updateDisplay()
+    return
+  }
+
+  const imageData = ctx.getImageData(sx, sy, sw, sh)
+  const data = imageData.data
+
+  // Average RGB across the bbox (alpha-weighted so transparent pixels don't dilute)
+  let rSum = 0, gSum = 0, bSum = 0, aSum = 0
+  for (let i = 0; i < data.length; i += 4) {
+    const a = data[i + 3] / 255
+    rSum += data[i] * a
+    gSum += data[i + 1] * a
+    bSum += data[i + 2] * a
+    aSum += a
+  }
+  if (aSum === 0) {
+    // Fully transparent bg — fall back to assuming the demo's background colour
+    contrastInfo.value = '—'
+    contrastCtrl.updateDisplay()
+    return
+  }
+  const avg: RGB = [
+    Math.round(rSum / aSum),
+    Math.round(gSum / aSum),
+    Math.round(bSum / aSum),
+  ]
+  const logo = parseHexColor(logoCfg.color)
+  const ratio = contrastRatio(logo, avg)
+  const tier = wcagTier(ratio)
+  const badge = tier === 'fail' ? '✗' : tier === 'AA-large' ? '⚠' : '✓'
+  contrastInfo.value = `${ratio.toFixed(2)}:1  ${badge} ${tier}`
+  contrastCtrl.updateDisplay()
+}
+
 // --- Animation state ---
 
 let animId: number | null = null
@@ -180,12 +246,38 @@ function applyParallaxToLayers(layerPoints: Point[][], indices: number[]): strin
   })
 }
 
+// When true, the next renderLayerPoints call will also recompute the contrast readout.
+let _updateContrastOnNextRender = false
+
 function renderLayerPoints(layerPoints: Point[][], indices: number[]) {
   const paths = applyParallaxToLayers(layerPoints, indices)
   const rc = buildRenderConfig(paths)
   rc.stepIndices = indices
   rc.totalStepCount = config.steps
-  render(canvas, rc, getPreviewTarget())
+
+  const logoCfg = rc.logo
+  const target = getPreviewTarget()
+  const { width, height, dpr } = target
+
+  // Render scene without logo so we can sample what's underneath it
+  render(canvas, { ...rc, logo: undefined }, target)
+
+  // Draw logo on top and (when triggered by a config change) update the contrast readout
+  if (logoCfg) {
+    if (_updateContrastOnNextRender) {
+      updateLogoContrast(canvas, logoCfg, width, height, dpr)
+      _updateContrastOnNextRender = false
+    }
+    const ctx = canvas.getContext('2d')
+    if (ctx) {
+      drawLogo(ctx, width, height, dpr, logoCfg.style, logoCfg.color, logoCfg.opacity ?? 1, logoCfg.scale ?? 1)
+    }
+  } else {
+    if (_updateContrastOnNextRender) {
+      updateLogoContrast(canvas, null, width, height, dpr)
+      _updateContrastOnNextRender = false
+    }
+  }
 }
 
 // --- Static render ---
@@ -577,6 +669,7 @@ function handleResize() {
   const target = getPreviewTarget()
   canvas.style.width = `${target.width}px`
   canvas.style.height = `${target.height}px`
+  _updateContrastOnNextRender = true
   if (!animId) startCurrentMode()
 }
 
@@ -595,6 +688,7 @@ document.addEventListener('visibilitychange', () => {
 const gui = new GUI({ title: 'Brand Shape Controls' })
 
 function onConfigChange() {
+  _updateContrastOnNextRender = true
   startCurrentMode()
 }
 
@@ -981,6 +1075,7 @@ logoFolder.add(config, 'logoStyle', ['symbol', 'wordmark']).name('Style').onChan
 logoFolder.addColor(config, 'logoColor').name('Color').onChange(onConfigChange)
 logoFolder.add(config, 'logoOpacity', 0, 1, 0.01).name('Opacity').onChange(onConfigChange)
 logoFolder.add(config, 'logoScale', 0.1, 5.0, 0.05).name('Scale').onChange(onConfigChange)
+contrastCtrl = logoFolder.add(contrastInfo, 'value').name('Contrast').disable()
 
 const exportFolder = gui.addFolder('Export')
 exportFolder.add(exportConfig, 'width', 16, 16384, 1).name('Width (px)').onChange(handleResize)
