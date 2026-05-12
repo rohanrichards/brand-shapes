@@ -18,7 +18,7 @@ import {
 import { presets, presetNames } from './presets'
 import { allColourHexes, allColourOptions } from '../core/colours'
 import { computeLogoPlacement } from '../core/logo'
-import { parseHexColor, contrastRatio, wcagTier, type RGB } from '../core/contrast'
+import { parseHexColor, contrastRatio, wcagTier, type RGB, type WcagTier } from '../core/contrast'
 
 const config = {
   from: 'organic-1',
@@ -150,9 +150,30 @@ function buildRenderConfig(customSteps?: string[]): RenderConfig {
 const contrastInfo = { value: '—' }
 let contrastCtrl: ReturnType<GUI['add']> | undefined
 
+const TIER_COLORS: Record<WcagTier, string> = {
+  'fail':     '#ff5252',
+  'AA-large': '#ffb547',
+  'AA':       '#7dd87d',
+  'AAA':      '#7dd87d',
+}
+
+function applyContrastTierColor(ctrl: ReturnType<GUI['add']>, tier: WcagTier): void {
+  const input = (ctrl as unknown as { $input?: HTMLInputElement }).$input
+  if (!input) return
+  input.style.color = TIER_COLORS[tier]
+  // Inline style must win over the .disable() class colour.
+  input.style.setProperty('color', TIER_COLORS[tier], 'important')
+}
+
+function clearContrastTierColor(ctrl: ReturnType<GUI['add']> | undefined): void {
+  if (!ctrl) return
+  const input = (ctrl as unknown as { $input?: HTMLInputElement }).$input
+  if (input) input.style.removeProperty('color')
+}
+
 function updateLogoContrast(
   canvas: HTMLCanvasElement,
-  logoCfg: { style: 'symbol' | 'wordmark'; color: string; scale?: number } | null,
+  logoCfg: { style: 'symbol' | 'wordmark'; color: string; opacity?: number; scale?: number } | null,
   width: number,
   height: number,
   dpr: number,
@@ -160,6 +181,7 @@ function updateLogoContrast(
   if (!logoCfg || !contrastCtrl) {
     contrastInfo.value = '—'
     contrastCtrl?.updateDisplay()
+    clearContrastTierColor(contrastCtrl)
     return
   }
   const ctx = canvas.getContext('2d')
@@ -175,6 +197,7 @@ function updateLogoContrast(
   if (sw <= 0 || sh <= 0) {
     contrastInfo.value = '—'
     contrastCtrl.updateDisplay()
+    clearContrastTierColor(contrastCtrl)
     return
   }
 
@@ -194,6 +217,7 @@ function updateLogoContrast(
     // Fully transparent underneath — no meaningful color to contrast against.
     contrastInfo.value = '—'
     contrastCtrl.updateDisplay()
+    clearContrastTierColor(contrastCtrl)
     return
   }
   const avg: RGB = [
@@ -202,11 +226,21 @@ function updateLogoContrast(
     Math.round(bSum / aSum),
   ]
   const logo = parseHexColor(logoCfg.color)
-  const ratio = contrastRatio(logo, avg)
+  // Compose the logo over the underneath via the configured opacity to get
+  // the effective foreground colour the user actually sees. As opacity falls
+  // toward 0, the foreground approaches the underneath and contrast collapses
+  // toward 1:1 — exactly what we want the readout to reflect.
+  const opacity = logoCfg.opacity ?? 1
+  const effective: RGB = [
+    Math.round(logo[0] * opacity + avg[0] * (1 - opacity)),
+    Math.round(logo[1] * opacity + avg[1] * (1 - opacity)),
+    Math.round(logo[2] * opacity + avg[2] * (1 - opacity)),
+  ]
+  const ratio = contrastRatio(effective, avg)
   const tier = wcagTier(ratio)
-  const badge = tier === 'fail' ? '✗' : tier === 'AA-large' ? '⚠' : '✓'
-  contrastInfo.value = `${ratio.toFixed(2)}:1  ${badge} ${tier}`
+  contrastInfo.value = `${ratio.toFixed(2)}:1  ${tier}`
   contrastCtrl.updateDisplay()
+  applyContrastTierColor(contrastCtrl, tier)
 }
 
 // --- Animation state ---
@@ -1072,10 +1106,10 @@ function exportSVG() {
 const logoFolder = gui.addFolder('Logo')
 logoFolder.add(config, 'logoEnabled').name('Enabled').onChange(onConfigChange)
 logoFolder.add(config, 'logoStyle', ['symbol', 'wordmark']).name('Style').onChange(onConfigChange)
+contrastCtrl = logoFolder.add(contrastInfo, 'value').name('Contrast').disable()
 logoFolder.addColor(config, 'logoColor').name('Color').onChange(onConfigChange)
 logoFolder.add(config, 'logoOpacity', 0, 1, 0.01).name('Opacity').onChange(onConfigChange)
 logoFolder.add(config, 'logoScale', 0.1, 5.0, 0.05).name('Scale').onChange(onConfigChange)
-contrastCtrl = logoFolder.add(contrastInfo, 'value').name('Contrast').disable()
 
 const exportFolder = gui.addFolder('Export')
 exportFolder.add(exportConfig, 'width', 16, 16384, 1).name('Width (px)').onChange(handleResize)
